@@ -21,6 +21,7 @@ chrono = { version = "0.4", default-features = false, features = ["clock"] }
 open = "5.3"
 rfd = "0.15"
 ureq = { version = "2.9", features = ["json"] }
+portable-pty = "0.9"
 
 [features]
 custom-protocol = ["tauri/custom-protocol"]

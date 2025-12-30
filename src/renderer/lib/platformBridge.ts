@@ -139,6 +139,17 @@ export function installPlatformBridge() {
     quitAndInstallUpdate: async () => ({ success: false, error: 'not implemented' }),
     openLatestDownload: async () => ({ success: false, error: 'not implemented' }),
     onUpdateEvent: () => noopCleanup,
+    ptyStart: async () => ({ ok: false, error: 'not implemented' }),
+    ptyInput: () => {},
+    ptyResize: () => {},
+    ptyKill: () => {},
+    onPtyData: () => noopCleanup,
+    ptyGetSnapshot: async () => ({ ok: false, error: 'not implemented' }),
+    ptySaveSnapshot: async () => ({ ok: false, error: 'not implemented' }),
+    ptyClearSnapshot: async () => ({ ok: false }),
+    onPtyExit: () => noopCleanup,
+    onPtyStarted: () => noopCleanup,
+    terminalGetTheme: async () => ({ ok: false, error: 'not implemented' }),
     getProjects: async () => [],
     getTasks: async () => [],
     saveProject: async () => ({ success: false, error: 'not implemented' }),
@@ -254,6 +265,72 @@ export function installPlatformBridge() {
         (window as any).electronAPI.openIn = (args: { app: string; path: string }) =>
           invoke('app_open_in', args);
         (window as any).electronAPI.openProject = () => invoke('project_open');
+        (window as any).electronAPI.ptyStart = (opts: {
+          id: string;
+          cwd?: string;
+          shell?: string;
+          command?: string;
+          env?: Record<string, string>;
+          cols?: number;
+          rows?: number;
+          autoApprove?: boolean;
+          initialPrompt?: string;
+          skipResume?: boolean;
+        }) => invoke('pty_start', opts);
+        (window as any).electronAPI.ptyInput = (args: { id: string; data: string }) => {
+          invoke('pty_input', args).catch(() => {});
+        };
+        (window as any).electronAPI.ptyResize = (args: { id: string; cols: number; rows: number }) => {
+          invoke('pty_resize', args).catch(() => {});
+        };
+        (window as any).electronAPI.ptyKill = (id: string) => {
+          invoke('pty_kill', { id }).catch(() => {});
+        };
+        (window as any).electronAPI.onPtyData = (
+          id: string,
+          listener: (data: string) => void
+        ) => {
+          const eventName = `pty:data:${id}`;
+          const promise = listen(eventName, (event) => {
+            listener(event.payload as string);
+          });
+          promise.catch(() => {});
+          return () => {
+            promise.then((unlisten) => unlisten()).catch(() => {});
+          };
+        };
+        (window as any).electronAPI.ptyGetSnapshot = (args: { id: string }) =>
+          invoke('pty_snapshot_get', args);
+        (window as any).electronAPI.ptySaveSnapshot = (args: {
+          id: string;
+          payload: any;
+        }) => invoke('pty_snapshot_save', args);
+        (window as any).electronAPI.ptyClearSnapshot = (args: { id: string }) =>
+          invoke('pty_snapshot_clear', args);
+        (window as any).electronAPI.onPtyExit = (
+          id: string,
+          listener: (info: { exitCode: number; signal?: number }) => void
+        ) => {
+          const eventName = `pty:exit:${id}`;
+          const promise = listen(eventName, (event) => {
+            listener(event.payload as any);
+          });
+          promise.catch(() => {});
+          return () => {
+            promise.then((unlisten) => unlisten()).catch(() => {});
+          };
+        };
+        (window as any).electronAPI.onPtyStarted = (
+          listener: (data: { id: string }) => void
+        ) => {
+          const promise = listen('pty:started', (event) => {
+            listener(event.payload as any);
+          });
+          promise.catch(() => {});
+          return () => {
+            promise.then((unlisten) => unlisten()).catch(() => {});
+          };
+        };
         (window as any).electronAPI.getSettings = () => invoke('settings_get');
         (window as any).electronAPI.updateSettings = (settings: Partial<Settings>) =>
           invoke('settings_update', { settings });
@@ -282,6 +359,7 @@ export function installPlatformBridge() {
           event: string,
           properties?: Record<string, any>
         ) => invoke('telemetry_capture', { event, properties });
+        (window as any).electronAPI.terminalGetTheme = () => invoke('terminal_get_theme');
         (window as any).electronAPI.githubCheckCLIInstalled = () =>
           invoke('github_check_cli_installed');
         (window as any).electronAPI.githubInstallCLI = () => invoke('github_install_cli');
