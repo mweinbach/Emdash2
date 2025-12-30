@@ -71,9 +71,11 @@ const warned = new Set<string>();
 
 const noopCleanup = () => {};
 
-const shouldInitTauri = typeof window !== 'undefined' && !!(window as any).__TAURI__;
-const runtime =
-  typeof window !== 'undefined' && (window as any).__TAURI__ ? 'tauri' : 'web';
+const isTauriRuntime = () => {
+  if (typeof window === 'undefined') return false;
+  const win = window as any;
+  return !!(win.__TAURI_INTERNALS__ || win.__TAURI__);
+};
 
 function warnOnce(name: string) {
   if (warned.has(name)) return;
@@ -100,6 +102,9 @@ function mergeSettings(base: Settings, patch?: Partial<Settings>): Settings {
 export function installPlatformBridge() {
   if (typeof window === 'undefined') return;
   if ((window as any).electronAPI) return;
+
+  const shouldInitTauri = isTauriRuntime();
+  const runtime = shouldInitTauri ? 'tauri' : 'web';
 
   let currentSettings: Settings = { ...DEFAULT_SETTINGS };
   let telemetry: TelemetryStatus = { ...DEFAULT_TELEMETRY };
@@ -612,44 +617,56 @@ export function installPlatformBridge() {
             projectId: args.projectId,
             projectPath: args.projectPath,
           });
+        const invokeWithArgs = async <T>(command: string, payload: Record<string, any>) => {
+          try {
+            return await invoke<T>(command, payload);
+          } catch (error: any) {
+            const message = error?.message ? String(error.message) : String(error || '');
+            if (message.includes('missing required key args')) {
+              return await invoke<T>(command, { args: payload });
+            }
+            throw error;
+          }
+        };
+
         (window as any).electronAPI.worktreeCreate = (args: {
           projectPath: string;
           taskName: string;
           projectId: string;
           autoApprove?: boolean;
         }) =>
-          invoke('worktree_create', {
+          invokeWithArgs('worktree_create', {
             projectPath: args.projectPath,
             taskName: args.taskName,
             projectId: args.projectId,
             autoApprove: args.autoApprove,
           });
         (window as any).electronAPI.worktreeList = (args: { projectPath: string }) =>
-          invoke('worktree_list', { projectPath: args.projectPath });
+          invokeWithArgs('worktree_list', { projectPath: args.projectPath });
         (window as any).electronAPI.worktreeRemove = (args: {
           projectPath: string;
           worktreeId: string;
           worktreePath?: string;
           branch?: string;
         }) =>
-          invoke('worktree_remove', {
+          invokeWithArgs('worktree_remove', {
             projectPath: args.projectPath,
             worktreeId: args.worktreeId,
             worktreePath: args.worktreePath,
             branch: args.branch,
           });
         (window as any).electronAPI.worktreeStatus = (args: { worktreePath: string }) =>
-          invoke('worktree_status', { worktreePath: args.worktreePath });
+          invokeWithArgs('worktree_status', { worktreePath: args.worktreePath });
         (window as any).electronAPI.worktreeMerge = (args: {
           projectPath: string;
           worktreeId: string;
         }) =>
-          invoke('worktree_merge', {
+          invokeWithArgs('worktree_merge', {
             projectPath: args.projectPath,
             worktreeId: args.worktreeId,
           });
         (window as any).electronAPI.worktreeGet = (args: { worktreeId: string }) =>
-          invoke('worktree_get', { worktreeId: args.worktreeId });
+          invokeWithArgs('worktree_get', { worktreeId: args.worktreeId });
         (window as any).electronAPI.worktreeGetAll = () => invoke('worktree_get_all');
         (window as any).electronAPI.fsList = (
           root: string,
