@@ -55,9 +55,15 @@ describe('resolveContainerConfig', () => {
   it('rejects invalid package manager values', () => {
     expect(() =>
       resolveContainerConfig({
-        packageManager: 'bun',
+        packageManager: 'deno',
       })
     ).toThrow(/packageManager/);
+  });
+
+  it('uses bun defaults when package manager is bun', () => {
+    const config = resolveContainerConfig({ packageManager: 'bun' });
+    expect(config.packageManager).toBe('bun');
+    expect(config.start).toBe('bun run dev');
   });
 });
 

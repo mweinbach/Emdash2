@@ -32,6 +32,7 @@
         sharedEnv =
           [
             nodejs
+            pkgs.bun
             pkgs.git
             pkgs.python3
             pkgs.pkg-config
@@ -89,11 +90,11 @@
                 mkdir -p "$TMPDIR/emdash-home"
 
                 # Build the app (renderer + main)
-                npm run build
+                bun run build
 
                 # Run electron-builder with electronDist override to avoid download
                 # Use --dir to only produce unpacked output (no AppImage/deb which require network)
-                npx electron-builder --linux --dir \
+                bunx electron-builder --linux --dir \
                   -c.electronDist=${electronDistDir} \
                   -c.electronVersion=${electronVersion}
 
@@ -153,7 +154,7 @@ EOF
           shellHook = ''
             echo "Emdash dev shell ready"
             echo "Node: $(node --version)"
-            echo "Run 'npm run d' for the full dev loop."
+            echo "Run 'bun run d' for the full dev loop."
           '';
         };
 

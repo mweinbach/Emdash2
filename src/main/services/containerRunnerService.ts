@@ -29,10 +29,13 @@ const RUN_EVENT_CHANNEL = 'runner-event';
 
 function detectPackageManagerFromWorkdir(dir: string): PackageManager | undefined {
   try {
+    const bunLock = path.join(dir, 'bun.lockb');
+    const bunLockText = path.join(dir, 'bun.lock');
     const pnpmLock = path.join(dir, 'pnpm-lock.yaml');
     const yarnLock = path.join(dir, 'yarn.lock');
     const npmLock = path.join(dir, 'package-lock.json');
     const npmShrinkwrap = path.join(dir, 'npm-shrinkwrap.json');
+    if (fs.existsSync(bunLock) || fs.existsSync(bunLockText)) return 'bun';
     if (fs.existsSync(pnpmLock)) return 'pnpm';
     if (fs.existsSync(yarnLock)) return 'yarn';
     if (fs.existsSync(npmLock) || fs.existsSync(npmShrinkwrap)) return 'npm';
@@ -677,7 +680,9 @@ export class ContainerRunnerService extends EventEmitter {
       } catch {}
 
       // Compose docker run args
-      const image = 'node:20';
+      // Detect package manager from lockfiles in workdir to avoid wrong PM creating lockfiles.
+      const detectedPm = detectPackageManagerFromWorkdir(workdirAbs) ?? config.packageManager;
+      const image = detectedPm === 'bun' ? 'oven/bun:1.3.5' : 'node:20';
       const dockerArgs: string[] = ['run', '-d', '--name', containerName];
 
       // Port mappings
@@ -719,8 +724,6 @@ export class ContainerRunnerService extends EventEmitter {
       }
 
       // Build command: safe install + start
-      // Detect package manager from lockfiles in workdir to avoid wrong PM creating lockfiles.
-      const detectedPm = detectPackageManagerFromWorkdir(workdirAbs) ?? config.packageManager;
       const startCmd = config.start;
 
       let installCmd = '';
@@ -728,6 +731,10 @@ export class ContainerRunnerService extends EventEmitter {
         // Avoid creating package-lock.json on fallback installs
         installCmd =
           'if [ -f package-lock.json ]; then npm ci; else npm install --no-package-lock; fi';
+      } else if (detectedPm === 'bun') {
+        // Prefer frozen lockfile when present; otherwise allow creation.
+        installCmd =
+          'if [ -f bun.lockb ] || [ -f bun.lock ]; then bun install --frozen-lockfile; else bun install; fi';
       } else if (detectedPm === 'pnpm') {
         // Use frozen lockfile when present; otherwise allow creation per pnpm defaults
         installCmd =

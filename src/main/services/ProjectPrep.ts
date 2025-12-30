@@ -17,7 +17,7 @@ function pickNodeInstallCmd(target: string): string[] {
       'npm install',
     ];
   }
-  if (existsSync(join(target, 'bun.lockb'))) {
+  if (existsSync(join(target, 'bun.lockb')) || existsSync(join(target, 'bun.lock'))) {
     return ['bun install', 'npm ci', 'npm install'];
   }
   if (existsSync(join(target, 'package-lock.json'))) {

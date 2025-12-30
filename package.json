@@ -3,28 +3,31 @@
   "version": "0.3.43",
   "description": "A cross-platform Electron app that orchestrates multiple coding agents in parallel",
   "main": "dist/main/main/entry.js",
+  "packageManager": "bun@1.3.5",
   "scripts": {
-    "d": "npm install && npm run dev",
-    "dev": "concurrently \"npm run dev:main\" \"npm run dev:renderer\"",
+    "d": "bun install && bun run dev",
+    "dev": "concurrently \"bun run dev:main\" \"bun run dev:renderer\"",
     "dev:main": "tsc -p tsconfig.main.json && mkdir -p dist/main && cp src/main/appConfig.json dist/main/appConfig.json && electron dist/main/main/entry.js --dev",
     "dev:renderer": "vite",
-    "build": "npm run build:main && npm run build:renderer",
+    "dev:tauri": "tauri dev",
+    "build": "bun run build:main && bun run build:renderer",
     "build:main": "tsc -p tsconfig.main.json && mkdir -p dist/main && cp src/main/appConfig.json dist/main/appConfig.json",
     "build:renderer": "vite build",
-    "package": "npm run build && electron-builder",
-    "package:mac": "npm run build && electron-builder --mac",
-    "package:linux": "npm run build && electron-builder --linux --publish never",
-    "package:win": "npm run build && electron-builder --win --publish never",
+    "build:tauri": "tauri build",
+    "package": "bun run build && electron-builder",
+    "package:mac": "bun run build && electron-builder --mac",
+    "package:linux": "bun run build && electron-builder --linux --publish never",
+    "package:win": "bun run build && electron-builder --win --publish never",
     "postinstall": "electron-rebuild",
     "rebuild": "electron-rebuild -f -v 30.5.1",
     "clean": "rm -rf node_modules dist",
-    "reset": "npm run clean && npm install",
+    "reset": "bun run clean && bun install",
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "type-check": "tsc --noEmit",
-    "docs": "cd docs && npm run dev",
-    "docs:build": "cd docs && npm run build"
+    "docs": "cd docs && bun run dev",
+    "docs:build": "cd docs && bun run build"
   },
   "keywords": [
     "electron",
@@ -39,10 +42,11 @@
   },
   "engines": {
     "node": ">=20.0.0 <23.0.0",
-    "npm": ">=9.0.0"
+    "bun": ">=1.3.0"
   },
   "devDependencies": {
     "@electron/rebuild": "^4.0.1",
+    "@tauri-apps/cli": "^2.5.3",
     "@types/node": "^20.10.0",
     "@types/react": "^18.2.45",
     "@types/react-dom": "^18.2.18",
@@ -67,6 +71,7 @@
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
+    "@tauri-apps/api": "^2.5.3",
     "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-alert-dialog": "^1.1.15",
     "@radix-ui/react-checkbox": "^1.3.3",

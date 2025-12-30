@@ -24,6 +24,11 @@
 
 <br />
 
+# Emdash2 (Tauri/Rust fork)
+
+> **Emdash2 is a fork of [generalaction/emdash](https://github.com/generalaction/emdash).**  
+> It keeps the Emdash product/UX, but the desktop shell is being migrated to **Tauri + Rust** (instead of Electron + TypeScript).
+
 **Run multiple coding agents in parallel**
 
 Emdash lets you develop and test multiple features with multiple agents in parallel. It’s provider-agnostic (supports 15+ CLI agents, such as Claude Code, Qwen Code, Amp, and Codex) and runs each agent in its own Git worktree to keep changes clean; Hand off Linear, GitHub, or Jira tickets to an agent and review diffs side-by-side.
@@ -176,13 +181,13 @@ Contributions welcome! See the [Contributing Guide](CONTRIBUTING.md) to get star
 > 1) Rebuild native modules:
 >
 > ```bash
-> npm run rebuild
+> bun run rebuild
 > ```
 >
 > 2) If that fails, clean and reinstall:
 >
 > ```bash
-> npm run reset
+> bun run reset
 > ```
 >
 > (Resets `node_modules`, reinstalls, and re‑builds Electron native deps.)
@@ -200,4 +205,3 @@ Contributions welcome! See the [Contributing Guide](CONTRIBUTING.md) to get star
 
 [![Follow @rabanspiegel](https://img.shields.io/twitter/follow/rabanspiegel?style=social&label=Follow%20%40rabanspiegel)](https://x.com/rabanspiegel)
 [![Follow @arnestrickmann](https://img.shields.io/twitter/follow/arnestrickmann?style=social&label=Follow%20%40arnestrickmann)](https://x.com/arnestrickmann)
-

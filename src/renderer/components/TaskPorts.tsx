@@ -226,7 +226,12 @@ const TaskPorts: React.FC<Props> = ({ taskId, taskPath, ports, previewUrl, previ
                   e.stopPropagation();
                   try {
                     const api: any = (window as any).electronAPI;
-                    const content = `services:\n  web:\n    image: node:20\n    working_dir: /workspace\n    volumes:\n      - ./:/workspace\n    environment:\n      - HOST=0.0.0.0\n      - PORT=3000\n    command: bash -lc \"if [ -f package-lock.json ]; then npm ci; else npm install --no-package-lock; fi && npm run dev\"\n    expose:\n      - \"3000\"\n`;
+                    const hasBunLock =
+                      (await api.fsRead(taskPath || '', 'bun.lockb', 1))?.success ||
+                      (await api.fsRead(taskPath || '', 'bun.lock', 1))?.success;
+                    const content = hasBunLock
+                      ? `services:\n  web:\n    image: oven/bun:1.3.5\n    working_dir: /workspace\n    volumes:\n      - ./:/workspace\n    environment:\n      - HOST=0.0.0.0\n      - PORT=3000\n    command: bash -lc \"if [ -f bun.lockb ] || [ -f bun.lock ]; then bun install --frozen-lockfile; else bun install; fi && bun run dev\"\n    expose:\n      - \"3000\"\n`
+                      : `services:\n  web:\n    image: node:20\n    working_dir: /workspace\n    volumes:\n      - ./:/workspace\n    environment:\n      - HOST=0.0.0.0\n      - PORT=3000\n    command: bash -lc \"if [ -f package-lock.json ]; then npm ci; else npm install --no-package-lock; fi && npm run dev\"\n    expose:\n      - \"3000\"\n`;
                     const res = await api.fsWriteFile(
                       taskPath || '',
                       'docker-compose.yml',

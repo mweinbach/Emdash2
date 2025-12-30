@@ -7,7 +7,7 @@ This file provides context and best practices for working with the Emdash codeba
 - **NEVER modify** `drizzle/meta/` or numbered migration files without explicit coordination
 - **NEVER commit** secrets, API keys, or user data
 - **NEVER modify** `build/` entitlements or updater config without review
-- **ALWAYS** run `npm run type-check` and `npm run lint` before committing
+- **ALWAYS** run `bun run type-check` and `bun run lint` before committing
 - **ALWAYS** test changes in both main and renderer processes
 - **ALWAYS** use worktrees for feature development (never commit directly to `main`) !!!!!
 
@@ -26,6 +26,7 @@ This file provides context and best practices for working with the Emdash codeba
 ### Tech Stack
 
 - **Runtime**: Electron 30.5.1, Node.js 20.0.0+ (recommended: 22.20.0)
+- **Package manager**: Bun 1.3+
 - **Frontend**: React 18, TypeScript 5.3, Vite 5, Tailwind CSS 3
 - **Backend**: Node.js, TypeScript, Drizzle ORM, SQLite3
 - **Native Modules**: node-pty, sqlite3, keytar (require rebuilding)
@@ -36,44 +37,44 @@ This file provides context and best practices for working with the Emdash codeba
 
 ```bash
 # Quick start: install dependencies and run dev server
-npm run d
+bun run d
 
 # Or separately:
-npm install          # Install dependencies
-npm run dev          # Run main + renderer concurrently
-npm run dev:main     # Run Electron main process only
-npm run dev:renderer # Run Vite dev server only
+bun install          # Install dependencies
+bun run dev          # Run main + renderer concurrently
+bun run dev:main     # Run Electron main process only
+bun run dev:renderer # Run Vite dev server only
 ```
 
 ### Building & Testing
 
 ```bash
-npm run build        # Build both main and renderer
-npm run build:main   # Build main process only
-npm run build:renderer # Build renderer only
+bun run build        # Build both main and renderer
+bun run build:main   # Build main process only
+bun run build:renderer # Build renderer only
 
-npm run type-check   # TypeScript type checking
-npm run lint         # ESLint
-npm run format       # Format with Prettier
-npm run format:check # Check formatting
+bun run type-check   # TypeScript type checking
+bun run lint         # ESLint
+bun run format       # Format with Prettier
+bun run format:check # Check formatting
 
-npx vitest run       # Run tests (tests in src/**/*.test.ts)
+bunx vitest run       # Run tests (tests in src/**/*.test.ts)
 ```
 
 ### Native Modules
 
 ```bash
-npm run rebuild      # Rebuild native modules (sqlite3, node-pty, keytar)
-npm run reset        # Clean install (removes node_modules, reinstalls)
+bun run rebuild      # Rebuild native modules (sqlite3, node-pty, keytar)
+bun run reset        # Clean install (removes node_modules, reinstalls)
 ```
 
 ### Packaging
 
 ```bash
-npm run package      # Build and package for current platform
-npm run package:mac  # Package for macOS
-npm run package:linux # Package for Linux
-npm run package:win  # Package for Windows
+bun run package      # Build and package for current platform
+bun run package:mac  # Package for macOS
+bun run package:linux # Package for Linux
+bun run package:win  # Package for Windows
 ```
 
 ## 📐 Code Style Guidelines
@@ -158,7 +159,7 @@ npm run package:win  # Package for Windows
 ## 🧪 Testing
 
 - **Test files**: `src/**/*.test.ts` (Vitest)
-- **Run tests**: `npx vitest run`
+- **Run tests**: `bunx vitest run`
 - **Test patterns**: Unit tests for utilities, integration tests for services
 - **Mocking**: Mock Electron APIs and external services
 - **Coverage**: Aim for critical paths (IPC handlers, services)
@@ -170,6 +171,9 @@ npm run package:win  # Package for Windows
 ```bash
 # Node.js (use nvm)
 nvm use  # Installs Node 22.20.0 if missing
+
+# Bun (package manager/runtime)
+bun --version  # Ensure Bun 1.3+
 
 # Optional but recommended:
 npm install -g @openai/codex  # For Codex agent testing
@@ -183,14 +187,14 @@ brew install gh  # GitHub CLI for GitHub integration
 git clone <repo-url>
 cd emdash
 nvm use
-npm run d  # Installs deps, rebuilds natives, starts dev server
+bun run d  # Installs deps, rebuilds natives, starts dev server
 ```
 
 ### Hot Reload
 
 - **Renderer changes**: Hot-reloads automatically via Vite
 - **Main process changes**: Require Electron app restart
-- **Native modules**: Require rebuild (`npm run rebuild`)
+- **Native modules**: Require rebuild (`bun run rebuild`)
 
 ## 🔍 Common Patterns
 
@@ -253,7 +257,7 @@ export function useExample(id: string) {
 2. **Worktree Path Resolution**: Always resolve worktree paths from `WorktreeService` when creating agents.
 3. **React Hooks Rules**: Never call hooks conditionally or after early returns.
 4. **IPC Type Safety**: Always define types in `electron-api.d.ts` for IPC methods.
-5. **Native Module Rebuilds**: After updating node-pty, sqlite3, or keytar, run `npm run rebuild`.
+5. **Native Module Rebuilds**: After updating node-pty, sqlite3, or keytar, run `bun run rebuild`.
 6. **Database Migrations**: Never manually edit migration files; use Drizzle Kit.
 7. **Context Sections**: When working with diffs, ensure context sections are properly collapsed/expanded.
 
@@ -322,7 +326,7 @@ export function useExample(id: string) {
 
 ## 🐛 Debugging Tips
 
-- **Main process logs**: Check terminal where `npm run dev:main` runs
+- **Main process logs**: Check terminal where `bun run dev:main` runs
 - **Renderer logs**: Check browser DevTools (View → Toggle Developer Tools)
 - **IPC debugging**: Add `log.debug()` calls in IPC handlers
 - **Database**: SQLite file location logged on startup

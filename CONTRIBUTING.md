@@ -6,7 +6,7 @@ Thanks for your interest in contributing! We favor small, focused PRs and clear 
 
 Prerequisites
 
-- **Node.js 20.0.0+ (recommended: 22.20.0)** and Git
+- **Node.js 20.0.0+ (recommended: 22.20.0)**, **Bun 1.3+**, and Git
 - Optional (recommended for end‑to‑end):
   - Codex CLI (`npm install -g @openai/codex` or `brew install codex`; then run `codex` to authenticate)
   - GitHub CLI (`brew install gh`; then `gh auth login`)
@@ -22,16 +22,16 @@ cd emdash
 nvm use
 
 # Quick start: install dependencies and run dev server
-npm run d
+bun run d
 
 # Or run separately:
-npm install
-npm run dev
+bun install
+bun run dev
 
 # Type checking, lint, build
- npm run type-check
- npm run lint
- npm run build
+ bun run type-check
+ bun run lint
+ bun run build
 ```
 
 Tip: During development, the renderer hot‑reloads. Changes to the Electron main process (files in `src/main`) require a restart of the dev app.
@@ -61,9 +61,9 @@ Tip: During development, the renderer hot‑reloads. Changes to the Electron mai
 3. Run checks locally
 
 ```
- npm run type-check
- npm run lint
- npm run build
+ bun run type-check
+ bun run lint
+ bun run build
 ```
 
 4. Commit using Conventional Commits
@@ -90,8 +90,8 @@ feat(ci): add type-check + build workflow for PRs
 
 TypeScript + ESLint
 
-- Keep code type‑safe. Run `npm run type-check` before pushing.
-- Run `npm run lint` and address warnings where reasonable.
+- Keep code type‑safe. Run `bun run type-check` before pushing.
+- Run `bun run lint` and address warnings where reasonable.
 
 Electron main (Node side)
 
@@ -135,22 +135,22 @@ Local DB (SQLite)
 
 ## Release Process (maintainers)
 
-Use npm's built-in versioning to ensure consistency:
+Use Bun's built-in versioning to ensure consistency:
 
 ```bash
 # For bug fixes (0.2.9 → 0.2.10)
-npm version patch
+bun pm version patch
 
 # For new features (0.2.9 → 0.3.0)
-npm version minor
+bun pm version minor
 
 # For breaking changes (0.2.9 → 1.0.0)
-npm version major
+bun pm version major
 ```
 
 This automatically:
 
-1. Updates `package.json` and `package-lock.json`
+1. Updates `package.json` and `bun.lock` (or `bun.lockb`) when present
 2. Creates a git commit with the version number (e.g., `"0.2.10"`)
 3. Creates a git tag (e.g., `v0.2.10`)
 

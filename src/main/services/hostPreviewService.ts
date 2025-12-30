@@ -13,8 +13,10 @@ export type HostPreviewEvent = {
   line?: string;
 };
 
-function detectPackageManager(dir: string): 'pnpm' | 'yarn' | 'npm' {
+function detectPackageManager(dir: string): 'pnpm' | 'yarn' | 'npm' | 'bun' {
   try {
+    if (fs.existsSync(path.join(dir, 'bun.lockb')) || fs.existsSync(path.join(dir, 'bun.lock')))
+      return 'bun';
     if (fs.existsSync(path.join(dir, 'pnpm-lock.yaml'))) return 'pnpm';
     if (fs.existsSync(path.join(dir, 'yarn.lock'))) return 'yarn';
     return 'npm';
@@ -46,7 +48,18 @@ class HostPreviewService extends EventEmitter {
     const cmd = pm;
     // Prefer clean install for npm when lockfile exists
     const hasPkgLock = fs.existsSync(path.join(cwd, 'package-lock.json'));
-    const args = pm === 'npm' ? (hasPkgLock ? ['ci'] : ['install']) : ['install'];
+    const hasBunLock =
+      fs.existsSync(path.join(cwd, 'bun.lockb')) || fs.existsSync(path.join(cwd, 'bun.lock'));
+    const args =
+      pm === 'npm'
+        ? hasPkgLock
+          ? ['ci']
+          : ['install']
+        : pm === 'bun'
+          ? hasBunLock
+            ? ['install', '--frozen-lockfile']
+            : ['install']
+          : ['install'];
     try {
       const child = spawn(cmd, args, {
         cwd,
@@ -217,7 +230,7 @@ class HostPreviewService extends EventEmitter {
       } catch {}
     }
     const cmd = pm;
-    let args: string[] = pm === 'npm' ? ['run', script] : [script];
+    let args: string[] = pm === 'npm' || pm === 'bun' ? ['run', script] : [script];
     const env = { ...process.env } as Record<string, string>;
 
     // Auto-install if package.json exists and node_modules is missing
@@ -226,7 +239,18 @@ class HostPreviewService extends EventEmitter {
       const hasNm = fs.existsSync(path.join(cwd, 'node_modules'));
       if (hasPkg && !hasNm) {
         const hasLock = fs.existsSync(path.join(cwd, 'package-lock.json'));
-        const installArgs = pm === 'npm' ? (hasLock ? ['ci'] : ['install']) : ['install'];
+        const hasBunLock =
+          fs.existsSync(path.join(cwd, 'bun.lockb')) || fs.existsSync(path.join(cwd, 'bun.lock'));
+        const installArgs =
+          pm === 'npm'
+            ? hasLock
+              ? ['ci']
+              : ['install']
+            : pm === 'bun'
+              ? hasBunLock
+                ? ['install', '--frozen-lockfile']
+                : ['install']
+              : ['install'];
         const inst = spawn(pm, installArgs, {
           cwd,
           shell: true,
@@ -283,7 +307,7 @@ class HostPreviewService extends EventEmitter {
       else if (looksLikeVite || looksLikeWebpack || looksLikeAngular)
         extra.push('--port', String(forcedPort));
       if (extra.length) {
-        if (pm === 'npm') args.push('--', ...extra);
+        if (pm === 'npm' || pm === 'bun') args.push('--', ...extra);
         else args.push(...extra);
       }
       log.info?.('[hostPreview] start', {
@@ -431,7 +455,7 @@ class HostPreviewService extends EventEmitter {
             if (idx >= 0 && idx + 1 < args.length) args[idx + 1] = String(forcedPort);
             else if (idxPort >= 0 && idxPort + 1 < args.length)
               args[idxPort + 1] = String(forcedPort);
-            else if (pm === 'npm') args.push('--', '-p', String(forcedPort));
+            else if (pm === 'npm' || pm === 'bun') args.push('--', '-p', String(forcedPort));
             else args.push('-p', String(forcedPort));
             log.info?.('[hostPreview] retry on new port', {
               taskId,

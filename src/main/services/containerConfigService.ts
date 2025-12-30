@@ -12,6 +12,8 @@ import {
 const CONFIG_RELATIVE_PATH = path.join('.emdash', 'config.json');
 
 const PACKAGE_MANAGER_LOCKFILES: Array<{ file: string; manager: PackageManager }> = [
+  { file: 'bun.lockb', manager: 'bun' },
+  { file: 'bun.lock', manager: 'bun' },
   { file: 'pnpm-lock.yaml', manager: 'pnpm' },
   { file: 'yarn.lock', manager: 'yarn' },
   { file: 'package-lock.json', manager: 'npm' },

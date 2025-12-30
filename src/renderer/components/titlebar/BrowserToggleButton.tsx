@@ -22,6 +22,13 @@ interface Props {
 
 const BrowserToggleButton: React.FC<Props> = ({ taskId, taskPath, parentProjectPath }) => {
   const browser = useBrowser();
+  const isTauriRuntime = (window as any)?.electronAPI?.__runtime === 'tauri';
+
+  const openExternal = React.useCallback((url: string) => {
+    try {
+      (window as any).electronAPI?.openExternal?.(url);
+    } catch {}
+  }, []);
   async function needsInstall(path?: string | null): Promise<boolean> {
     const p = (path || '').trim();
     if (!p) return false;
@@ -50,7 +57,11 @@ const BrowserToggleButton: React.FC<Props> = ({ taskId, taskPath, parentProjectP
           if (taskId && data.taskId !== taskId) return;
           const appPort = Number(window.location.port || 0);
           if (isAppPort(String(data.url), appPort)) return;
-          browser.open(String(data.url));
+          if (isTauriRuntime) {
+            openExternal(String(data.url));
+          } else {
+            browser.open(String(data.url));
+          }
           try {
             if (taskId) {
               setLastUrl(taskId, String(data.url));
@@ -77,15 +88,17 @@ const BrowserToggleButton: React.FC<Props> = ({ taskId, taskPath, parentProjectP
         off?.();
       } catch {}
     };
-  }, [browser, taskId]);
+  }, [browser, taskId, isTauriRuntime, openExternal]);
 
   const handleClick = React.useCallback(async () => {
     const id = (taskId || '').trim();
     const wp = (taskPath || '').trim();
     const appPort = Number(window.location.port || 0);
     // Open pane immediately with no URL; we will navigate when ready
-    browser.showSpinner();
-    browser.toggle(undefined);
+    if (!isTauriRuntime) {
+      browser.showSpinner();
+      browser.toggle(undefined);
+    }
 
     if (id) {
       try {
@@ -96,7 +109,11 @@ const BrowserToggleButton: React.FC<Props> = ({ taskId, taskPath, parentProjectP
           const portClashesWithApp = isAppPort(last, appPort);
           const reachable = !portClashesWithApp && (await isReachable(last));
           if (reachable) {
-            browser.open(last);
+            if (isTauriRuntime) {
+              openExternal(last);
+            } else {
+              browser.open(last);
+            }
             openedFromLast = true;
           }
           if (running && !reachable) {
@@ -105,7 +122,7 @@ const BrowserToggleButton: React.FC<Props> = ({ taskId, taskPath, parentProjectP
             } catch {}
           }
         }
-        if (openedFromLast) browser.hideSpinner();
+        if (openedFromLast && !isTauriRuntime) browser.hideSpinner();
       } catch {}
     }
 
@@ -136,20 +153,28 @@ const BrowserToggleButton: React.FC<Props> = ({ taskId, taskPath, parentProjectP
             // Avoid the app's own port
             if (isAppPort(candidate, appPort)) return;
             if (await isReachable(candidate)) {
-              browser.open(candidate);
+              if (isTauriRuntime) {
+                openExternal(candidate);
+              } else {
+                browser.open(candidate);
+              }
               try {
                 setLastUrl(id, candidate);
                 setRunning(id, true);
               } catch {}
-              browser.hideSpinner();
+              if (!isTauriRuntime) browser.hideSpinner();
             }
           } catch {}
         }, FALLBACK_DELAY_MS);
       } catch {}
     }
     // Fallback: clear spinner after a grace period if nothing arrives
-    setTimeout(() => browser.hideSpinner(), SPINNER_MAX_MS);
-  }, [browser, taskId, taskPath, parentProjectPath]);
+    if (!isTauriRuntime) {
+      setTimeout(() => browser.hideSpinner(), SPINNER_MAX_MS);
+    }
+  }, [browser, taskId, taskPath, parentProjectPath, isTauriRuntime, openExternal]);
+
+  const buttonLabel = isTauriRuntime ? 'Open preview in browser' : 'Toggle in-app browser';
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -159,7 +184,7 @@ const BrowserToggleButton: React.FC<Props> = ({ taskId, taskPath, parentProjectP
             type="button"
             variant="ghost"
             size="icon"
-            aria-label="Toggle in-app browser"
+            aria-label={buttonLabel}
             onClick={handleClick}
             className="h-8 w-8 text-muted-foreground hover:bg-background/80"
           >
@@ -168,7 +193,7 @@ const BrowserToggleButton: React.FC<Props> = ({ taskId, taskPath, parentProjectP
         </TooltipTrigger>
         <TooltipContent side="bottom" className="text-xs font-medium">
           <div className="flex flex-col gap-1">
-            <span>Toggle in-app browser</span>
+            <span>{buttonLabel}</span>
           </div>
         </TooltipContent>
       </Tooltip>

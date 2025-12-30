@@ -44,6 +44,19 @@ describe('loadTaskContainerConfig', () => {
     }
   });
 
+  it('infers bun when bun lockfile is present', async () => {
+    const taskDir = makeTaskDir('bun-config');
+    fs.writeFileSync(path.join(taskDir, 'bun.lock'), '', 'utf8');
+
+    const result = await loadTaskContainerConfig(taskDir);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.config.packageManager).toBe('bun');
+      expect(result.config.start).toBe('bun run dev');
+    }
+  });
+
   it('parses config file and maintains overrides', async () => {
     const taskDir = makeTaskDir('custom-config');
     const configDir = path.join(taskDir, '.emdash');

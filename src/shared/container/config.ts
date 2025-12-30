@@ -1,10 +1,11 @@
 const DEFAULT_VERSION = 1;
 const DEFAULT_START_COMMAND = 'npm run dev';
+const DEFAULT_BUN_START_COMMAND = 'bun run dev';
 const DEFAULT_WORKDIR = '.';
 
 export const DEFAULT_PREVIEW_SERVICE = 'app';
 
-export type PackageManager = 'npm' | 'pnpm' | 'yarn';
+export type PackageManager = 'npm' | 'pnpm' | 'yarn' | 'bun';
 
 export interface ContainerPortConfig {
   service: string;
@@ -52,7 +53,7 @@ export class ContainerConfigError extends Error {
   }
 }
 
-const VALID_PACKAGE_MANAGERS: PackageManager[] = ['npm', 'pnpm', 'yarn'];
+const VALID_PACKAGE_MANAGERS: PackageManager[] = ['npm', 'pnpm', 'yarn', 'bun'];
 
 const DEFAULT_PORT: ResolvedContainerPortConfig = {
   service: DEFAULT_PREVIEW_SERVICE,
@@ -79,7 +80,7 @@ export function resolveContainerConfig(
     source.packageManager,
     options.inferredPackageManager
   );
-  const start = resolveStartCommand(source.start);
+  const start = resolveStartCommand(source.start, packageManager);
   const envFile = resolveEnvFile(source.envFile);
   const workdir = resolveWorkdir(source.workdir);
   const ports = resolvePorts(source.ports);
@@ -109,22 +110,24 @@ function resolvePackageManager(raw: unknown, inferred?: PackageManager): Package
   if (raw == null) return inferred ?? 'npm';
   if (typeof raw !== 'string') {
     throw new ContainerConfigError(
-      '`packageManager` must be a string ("npm" | "pnpm" | "yarn")',
+      '`packageManager` must be a string ("npm" | "pnpm" | "yarn" | "bun")',
       'packageManager'
     );
   }
   const normalized = raw.trim().toLowerCase();
   if (!VALID_PACKAGE_MANAGERS.includes(normalized as PackageManager)) {
     throw new ContainerConfigError(
-      '`packageManager` must be one of "npm", "pnpm", or "yarn"',
+      '`packageManager` must be one of "npm", "pnpm", "yarn", or "bun"',
       'packageManager'
     );
   }
   return normalized as PackageManager;
 }
 
-function resolveStartCommand(raw: unknown): string {
-  if (raw == null) return DEFAULT_START_COMMAND;
+function resolveStartCommand(raw: unknown, packageManager: PackageManager): string {
+  if (raw == null) {
+    return packageManager === 'bun' ? DEFAULT_BUN_START_COMMAND : DEFAULT_START_COMMAND;
+  }
   if (typeof raw !== 'string') {
     throw new ContainerConfigError('`start` must be a string', 'start');
   }
@@ -254,7 +257,7 @@ export type ContainerConfigSchema = {
     readonly version: { readonly type: 'integer'; readonly enum: readonly [1] };
     readonly packageManager: {
       readonly type: 'string';
-      readonly enum: readonly ['npm', 'pnpm', 'yarn'];
+      readonly enum: readonly ['npm', 'pnpm', 'yarn', 'bun'];
     };
     readonly start: { readonly type: 'string'; readonly minLength: 1 };
     readonly envFile: { readonly type: 'string'; readonly minLength: 1 };
@@ -287,7 +290,7 @@ export const CONTAINER_CONFIG_JSON_SCHEMA: ContainerConfigSchema = {
   additionalProperties: false,
   properties: {
     version: { type: 'integer', enum: [1] as const },
-    packageManager: { type: 'string', enum: ['npm', 'pnpm', 'yarn'] as const },
+    packageManager: { type: 'string', enum: ['npm', 'pnpm', 'yarn', 'bun'] as const },
     start: { type: 'string', minLength: 1 },
     envFile: { type: 'string', minLength: 1 },
     workdir: { type: 'string', minLength: 1 },

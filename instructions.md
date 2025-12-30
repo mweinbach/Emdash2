@@ -6,7 +6,7 @@ Goal: Electron app that opens **multiple pseudo-terminals**, one per **Git workt
 
 ## Prereqs
 
-- Node 18+, Git 2.38+, pnpm (or npm/yarn)
+- Node 20+, Git 2.38+, Bun (or npm/pnpm/yarn)
 - Electron + Vite scaffold (or create one)
 - Optional CLIs installed on PATH: `aider`, `ollama`, `anthropic`, `openai`
 
@@ -28,7 +28,7 @@ Goal: Electron app that opens **multiple pseudo-terminals**, one per **Git workt
 
 **Tasks**
 
-- Install: `pnpm add node-pty xterm && pnpm add -D @types/node`
+- Install: `bun add node-pty xterm && bun add -d @types/node`
 - Create `src/main/ptyManager.ts` with:
   - `startPty(id, cwd, shell?) -> IPty` (stores in `Map`)
   - `writePty(id, data)`, `resizePty(id, cols, rows)`, `killPty(id)`

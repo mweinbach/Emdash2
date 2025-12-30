@@ -1,14 +1,14 @@
 ---
 default_branch: main
-package_manager: npm
+package_manager: bun
 node_version: "22.20.0"
-start_command: "npm run d"
-dev_command: "npm run dev"
-build_command: "npm run build"
+start_command: "bun run d"
+dev_command: "bun run dev"
+build_command: "bun run build"
 test_commands:
-  - "npm run lint"
-  - "npm run type-check"
-  - "npx vitest run"
+  - "bun run lint"
+  - "bun run type-check"
+  - "bunx vitest run"
 ports:
   dev: 3000
 required_env: []
@@ -22,18 +22,18 @@ optional_env:
 
 **Quickstart**
 1. `nvm use` (installs Node 22.20.0 if missing) or install Node 22.x manually.
-2. `npm run d` to install dependencies, rebuild native modules, and launch Electron + Vite.
-3. If `npm run d` fails mid-stream, rerun `npm install`, then `npm run dev` (main + renderer).
+2. `bun run d` to install dependencies, rebuild native modules, and launch Electron + Vite.
+3. If `bun run d` fails mid-stream, rerun `bun install`, then `bun run dev` (main + renderer).
 
 **Testing**
-1. Run `npm run lint`.
-2. Run `npm run type-check`.
-3. Run `npx vitest run` (tests live under `src/**/*.test.ts`).
+1. Run `bun run lint`.
+2. Run `bun run type-check`.
+3. Run `bunx vitest run` (tests live under `src/**/*.test.ts`).
 
 **Build & Package**
-1. `npm run build` to compile the Electron main and Vite renderer.
-2. Platform-specific installers: `npm run package:mac|linux|win` (artifacts in `release/`).
-3. If native modules misbehave, `npm run rebuild`; use `npm run reset` as a last resort.
+1. `bun run build` to compile the Electron main and Vite renderer.
+2. Platform-specific installers: `bun run package:mac|linux|win` (artifacts in `release/`).
+3. If native modules misbehave, `bun run rebuild`; use `bun run reset` as a last resort.
 
 **Repo Map**
 - `src/main/` – Electron main process, IPC, database access, CLI orchestration.
@@ -57,7 +57,7 @@ optional_env:
 - Native dependencies (`sqlite3`, `node-pty`, `keytar`) – rebuilding is slow; avoid upgrading casually.
 
 **Pre-PR Checklist**
-- [ ] Dev server runs: `npm run d` (or `npm run dev`) starts cleanly.
-- [ ] Tests and checks pass: `npm run lint`, `npm run type-check`, `npx vitest run`.
+- [ ] Dev server runs: `bun run d` (or `bun run dev`) starts cleanly.
+- [ ] Tests and checks pass: `bun run lint`, `bun run type-check`, `bunx vitest run`.
 - [ ] No stray build artifacts or secrets committed.
 - [ ] Documented any schema or config changes impacting users.

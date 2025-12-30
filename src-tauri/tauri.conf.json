@@ -1,0 +1,47 @@
+{
+  "productName": "emdash",
+  "version": "0.3.43",
+  "identifier": "com.emdash",
+  "build": {
+    "beforeDevCommand": "bun run dev:renderer",
+    "beforeBuildCommand": "bun run build:renderer",
+    "devUrl": "http://localhost:3000",
+    "frontendDist": "../dist/renderer"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Emdash",
+        "width": 1400,
+        "height": 900,
+        "minWidth": 1200,
+        "minHeight": 800,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": null,
+      "capabilities": [
+        {
+          "identifier": "main",
+          "windows": ["main"],
+          "permissions": [
+            "core:event:default",
+            "core:event:allow-listen",
+            "core:event:allow-unlisten"
+          ]
+        }
+      ]
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["dmg"],
+    "category": "public.app-category.developer-tools",
+    "icon": [
+      "../src/assets/images/emdash/emdash_logo.png",
+      "../src/assets/images/emdash/emdash.icns"
+    ],
+    "resources": ["../drizzle/"]
+  }
+}
