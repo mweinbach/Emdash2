@@ -276,7 +276,7 @@ export function installPlatformBridge() {
           autoApprove?: boolean;
           initialPrompt?: string;
           skipResume?: boolean;
-        }) => invoke('pty_start', opts);
+        }) => invoke('pty_start', { args: opts });
         (window as any).electronAPI.ptyInput = (args: { id: string; data: string }) => {
           invoke('pty_input', args).catch(() => {});
         };
@@ -370,13 +370,13 @@ export function installPlatformBridge() {
         (window as any).electronAPI.githubGetUser = () => invoke('github_get_user');
         (window as any).electronAPI.githubGetRepositories = () => invoke('github_get_repositories');
         (window as any).electronAPI.connectToGitHub = (projectPath: string) =>
-          invoke('github_connect', { project_path: projectPath });
+          invoke('github_connect', { projectPath });
         (window as any).electronAPI.githubCloneRepository = (
           repoUrl: string,
           localPath: string
-        ) => invoke('github_clone_repository', { repo_url: repoUrl, local_path: localPath });
+        ) => invoke('github_clone_repository', { repoUrl, localPath });
         (window as any).electronAPI.githubListPullRequests = (projectPath: string) =>
-          invoke('github_list_pull_requests', { project_path: projectPath });
+          invoke('github_list_pull_requests', { projectPath });
         (window as any).electronAPI.githubLogout = () => invoke('github_logout');
         (window as any).electronAPI.githubGetOwners = () => invoke('github_get_owners');
         (window as any).electronAPI.githubValidateRepoName = (name: string, owner: string) =>
@@ -392,34 +392,34 @@ export function installPlatformBridge() {
             name: params.name,
             description: params.description,
             owner: params.owner,
-            is_private: params.isPrivate,
+            isPrivate: params.isPrivate,
           });
         (window as any).electronAPI.githubIssuesList = (
           projectPath: string,
           limit?: number
-        ) => invoke('github_issues_list', { project_path: projectPath, limit });
+        ) => invoke('github_issues_list', { projectPath, limit });
         (window as any).electronAPI.githubIssuesSearch = (
           projectPath: string,
           searchTerm: string,
           limit?: number
         ) =>
           invoke('github_issues_search', {
-            project_path: projectPath,
-            search_term: searchTerm,
+            projectPath,
+            searchTerm,
             limit,
           });
         (window as any).electronAPI.githubIssueGet = (projectPath: string, number: number) =>
-          invoke('github_issue_get', { project_path: projectPath, number });
+          invoke('github_issue_get', { projectPath, number });
         (window as any).electronAPI.getGitInfo = (projectPath: string) =>
-          invoke('git_get_info', { project_path: projectPath });
+          invoke('git_get_info', { projectPath });
         (window as any).electronAPI.getGitStatus = (taskPath: string) =>
-          invoke('git_get_status', { task_path: taskPath });
+          invoke('git_get_status', { taskPath });
         (window as any).electronAPI.getFileDiff = (args: { taskPath: string; filePath: string }) =>
-          invoke('git_get_file_diff', { task_path: args.taskPath, file_path: args.filePath });
+          invoke('git_get_file_diff', { taskPath: args.taskPath, filePath: args.filePath });
         (window as any).electronAPI.stageFile = (args: { taskPath: string; filePath: string }) =>
-          invoke('git_stage_file', { task_path: args.taskPath, file_path: args.filePath });
+          invoke('git_stage_file', { taskPath: args.taskPath, filePath: args.filePath });
         (window as any).electronAPI.revertFile = (args: { taskPath: string; filePath: string }) =>
-          invoke('git_revert_file', { task_path: args.taskPath, file_path: args.filePath });
+          invoke('git_revert_file', { taskPath: args.taskPath, filePath: args.filePath });
         (window as any).electronAPI.gitCommitAndPush = (args: {
           taskPath: string;
           commitMessage?: string;
@@ -427,17 +427,17 @@ export function installPlatformBridge() {
           branchPrefix?: string;
         }) =>
           invoke('git_commit_and_push', {
-            task_path: args.taskPath,
-            commit_message: args.commitMessage,
-            create_branch_if_on_default: args.createBranchIfOnDefault,
-            branch_prefix: args.branchPrefix,
+            taskPath: args.taskPath,
+            commitMessage: args.commitMessage,
+            createBranchIfOnDefault: args.createBranchIfOnDefault,
+            branchPrefix: args.branchPrefix,
           });
         (window as any).electronAPI.generatePrContent = (args: {
           taskPath: string;
           base?: string;
         }) =>
           invoke('git_generate_pr_content', {
-            task_path: args.taskPath,
+            taskPath: args.taskPath,
             base: args.base,
           });
         (window as any).electronAPI.createPullRequest = (args: {
@@ -451,7 +451,7 @@ export function installPlatformBridge() {
           fill?: boolean;
         }) =>
           invoke('git_create_pr', {
-            task_path: args.taskPath,
+            taskPath: args.taskPath,
             title: args.title,
             body: args.body,
             base: args.base,
@@ -461,21 +461,21 @@ export function installPlatformBridge() {
             fill: args.fill,
           });
         (window as any).electronAPI.getPrStatus = (args: { taskPath: string }) =>
-          invoke('git_get_pr_status', { task_path: args.taskPath });
+          invoke('git_get_pr_status', { taskPath: args.taskPath });
         (window as any).electronAPI.getBranchStatus = (args: { taskPath: string }) =>
-          invoke('git_get_branch_status', { task_path: args.taskPath });
+          invoke('git_get_branch_status', { taskPath: args.taskPath });
         (window as any).electronAPI.listRemoteBranches = (args: {
           projectPath: string;
           remote?: string;
         }) =>
           invoke('git_list_remote_branches', {
-            project_path: args.projectPath,
+            projectPath: args.projectPath,
             remote: args.remote,
           });
         (window as any).electronAPI.hostPreviewSetup = (args: { taskId: string; taskPath: string }) =>
           invoke('host_preview_setup', {
-            task_id: args.taskId,
-            task_path: args.taskPath,
+            taskId: args.taskId,
+            taskPath: args.taskPath,
           });
         (window as any).electronAPI.hostPreviewStart = (args: {
           taskId: string;
@@ -484,15 +484,15 @@ export function installPlatformBridge() {
           parentProjectPath?: string;
         }) =>
           invoke('host_preview_start', {
-            task_id: args.taskId,
-            task_path: args.taskPath,
+            taskId: args.taskId,
+            taskPath: args.taskPath,
             script: args.script,
-            parent_project_path: args.parentProjectPath,
+            parentProjectPath: args.parentProjectPath,
           });
         (window as any).electronAPI.hostPreviewStop = (taskId: string) =>
-          invoke('host_preview_stop', { task_id: taskId });
+          invoke('host_preview_stop', { taskId });
         (window as any).electronAPI.hostPreviewStopAll = (exceptId?: string) =>
-          invoke('host_preview_stop_all', { except_id: exceptId });
+          invoke('host_preview_stop_all', { exceptId });
         (window as any).electronAPI.onHostPreviewEvent = (listener: (data: any) => void) => {
           const promise = listen('preview:host:event', (event) => {
             listener(event.payload as any);
@@ -506,33 +506,33 @@ export function installPlatformBridge() {
         (window as any).electronAPI.saveProject = (project: any) =>
           invoke('db_save_project', { project });
         (window as any).electronAPI.getTasks = (projectId?: string) =>
-          invoke('db_get_tasks', { project_id: projectId });
+          invoke('db_get_tasks', { projectId });
         (window as any).electronAPI.saveTask = (task: any) => invoke('db_save_task', { task });
         (window as any).electronAPI.deleteProject = (projectId: string) =>
-          invoke('db_delete_project', { project_id: projectId });
+          invoke('db_delete_project', { projectId });
         (window as any).electronAPI.deleteTask = (taskId: string) =>
-          invoke('db_delete_task', { task_id: taskId });
+          invoke('db_delete_task', { taskId });
         (window as any).electronAPI.saveConversation = (conversation: any) =>
           invoke('db_save_conversation', { conversation });
         (window as any).electronAPI.getConversations = (taskId: string) =>
-          invoke('db_get_conversations', { task_id: taskId });
+          invoke('db_get_conversations', { taskId });
         (window as any).electronAPI.getOrCreateDefaultConversation = (taskId: string) =>
-          invoke('db_get_or_create_default_conversation', { task_id: taskId });
+          invoke('db_get_or_create_default_conversation', { taskId });
         (window as any).electronAPI.saveMessage = (message: any) =>
           invoke('db_save_message', { message });
         (window as any).electronAPI.getMessages = (conversationId: string) =>
-          invoke('db_get_messages', { conversation_id: conversationId });
+          invoke('db_get_messages', { conversationId });
         (window as any).electronAPI.deleteConversation = (conversationId: string) =>
-          invoke('db_delete_conversation', { conversation_id: conversationId });
+          invoke('db_delete_conversation', { conversationId });
         (window as any).electronAPI.getProjectSettings = (projectId: string) =>
-          invoke('project_settings_get', { project_id: projectId });
+          invoke('project_settings_get', { projectId });
         (window as any).electronAPI.updateProjectSettings = (args: {
           projectId: string;
           baseRef: string;
         }) =>
           invoke('project_settings_update', {
-            project_id: args.projectId,
-            base_ref: args.baseRef,
+            projectId: args.projectId,
+            baseRef: args.baseRef,
           });
         (window as any).electronAPI.fsList = (
           root: string,
@@ -540,27 +540,27 @@ export function installPlatformBridge() {
         ) =>
           invoke('fs_list', {
             root,
-            include_dirs: opts?.includeDirs,
-            max_entries: opts?.maxEntries,
+            includeDirs: opts?.includeDirs,
+            maxEntries: opts?.maxEntries,
           });
         (window as any).electronAPI.fsRead = (root: string, relPath: string, maxBytes?: number) =>
-          invoke('fs_read', { root, rel_path: relPath, max_bytes: maxBytes });
+          invoke('fs_read', { root, relPath, maxBytes });
         (window as any).electronAPI.fsWriteFile = (
           root: string,
           relPath: string,
           content: string,
           mkdirs?: boolean
-        ) => invoke('fs_write', { root, rel_path: relPath, content, mkdirs });
+        ) => invoke('fs_write', { root, relPath, content, mkdirs });
         (window as any).electronAPI.fsRemove = (root: string, relPath: string) =>
-          invoke('fs_remove', { root, rel_path: relPath });
+          invoke('fs_remove', { root, relPath });
         (window as any).electronAPI.saveAttachment = (args: {
           taskPath: string;
           srcPath: string;
           subdir?: string;
         }) =>
           invoke('fs_save_attachment', {
-            task_path: args.taskPath,
-            src_path: args.srcPath,
+            taskPath: args.taskPath,
+            srcPath: args.srcPath,
             subdir: args.subdir,
           });
         (window as any).electronAPI.onGithubAuthDeviceCode = (

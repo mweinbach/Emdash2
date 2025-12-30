@@ -470,6 +470,23 @@ fn lock_conn(state: &DbState) -> Result<std::sync::MutexGuard<'_, Option<Connect
   state.conn.lock().map_err(|_| "DB lock poisoned".to_string())
 }
 
+pub fn task_agent_id_for_path(state: &DbState, task_path: &str) -> Option<String> {
+  if state.disabled {
+    return None;
+  }
+  let guard = lock_conn(state).ok()?;
+  let conn = guard.as_ref()?;
+  let row: Option<Option<String>> = conn
+    .query_row(
+      "SELECT agent_id FROM tasks WHERE path = ?1 LIMIT 1",
+      params![task_path],
+      |row| row.get(0),
+    )
+    .optional()
+    .ok()?;
+  row.flatten()
+}
+
 fn query_project_settings(conn: &Connection, project_id: &str) -> Result<Value, String> {
   let row = conn
     .query_row(

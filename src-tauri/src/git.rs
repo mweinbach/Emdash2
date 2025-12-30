@@ -1,13 +1,178 @@
+use crate::db::{self, DbState};
+use crate::providers;
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::collections::HashSet;
 use std::fs;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::process::Command;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::process::{Command, Stdio};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 const DEFAULT_REMOTE: &str = "origin";
 const DEFAULT_BRANCH: &str = "main";
+
+#[derive(Clone, Copy)]
+struct ProviderGenerationConfig {
+  id: &'static str,
+  cli: &'static str,
+  version_args: Option<&'static [&'static str]>,
+  default_args: Option<&'static [&'static str]>,
+  auto_approve_flag: Option<&'static str>,
+  initial_prompt_flag: Option<&'static str>,
+}
+
+const PROVIDER_GENERATION_CONFIGS: &[ProviderGenerationConfig] = &[
+  ProviderGenerationConfig {
+    id: "codex",
+    cli: "codex",
+    version_args: Some(&["--version"]),
+    default_args: None,
+    auto_approve_flag: Some("--full-auto"),
+    initial_prompt_flag: Some(""),
+  },
+  ProviderGenerationConfig {
+    id: "claude",
+    cli: "claude",
+    version_args: Some(&["--version"]),
+    default_args: None,
+    auto_approve_flag: Some("--dangerously-skip-permissions"),
+    initial_prompt_flag: Some(""),
+  },
+  ProviderGenerationConfig {
+    id: "cursor",
+    cli: "cursor-agent",
+    version_args: Some(&["--version"]),
+    default_args: None,
+    auto_approve_flag: Some("-p"),
+    initial_prompt_flag: Some(""),
+  },
+  ProviderGenerationConfig {
+    id: "gemini",
+    cli: "gemini",
+    version_args: Some(&["--version"]),
+    default_args: None,
+    auto_approve_flag: Some("--yolomode"),
+    initial_prompt_flag: Some("-i"),
+  },
+  ProviderGenerationConfig {
+    id: "qwen",
+    cli: "qwen",
+    version_args: Some(&["--version"]),
+    default_args: None,
+    auto_approve_flag: Some("--yolo"),
+    initial_prompt_flag: Some("-i"),
+  },
+  ProviderGenerationConfig {
+    id: "droid",
+    cli: "droid",
+    version_args: Some(&["--version"]),
+    default_args: None,
+    auto_approve_flag: None,
+    initial_prompt_flag: Some(""),
+  },
+  ProviderGenerationConfig {
+    id: "amp",
+    cli: "amp",
+    version_args: Some(&["--version"]),
+    default_args: None,
+    auto_approve_flag: None,
+    initial_prompt_flag: None,
+  },
+  ProviderGenerationConfig {
+    id: "opencode",
+    cli: "opencode",
+    version_args: Some(&["--version"]),
+    default_args: None,
+    auto_approve_flag: None,
+    initial_prompt_flag: Some("-p"),
+  },
+  ProviderGenerationConfig {
+    id: "copilot",
+    cli: "copilot",
+    version_args: Some(&["--version"]),
+    default_args: None,
+    auto_approve_flag: None,
+    initial_prompt_flag: None,
+  },
+  ProviderGenerationConfig {
+    id: "charm",
+    cli: "crush",
+    version_args: Some(&["--version"]),
+    default_args: None,
+    auto_approve_flag: None,
+    initial_prompt_flag: None,
+  },
+  ProviderGenerationConfig {
+    id: "auggie",
+    cli: "auggie",
+    version_args: Some(&["--version"]),
+    default_args: Some(&["--allow-indexing"]),
+    auto_approve_flag: None,
+    initial_prompt_flag: Some(""),
+  },
+  ProviderGenerationConfig {
+    id: "goose",
+    cli: "goose",
+    version_args: None,
+    default_args: Some(&["run", "-s"]),
+    auto_approve_flag: None,
+    initial_prompt_flag: Some("-t"),
+  },
+  ProviderGenerationConfig {
+    id: "kimi",
+    cli: "kimi",
+    version_args: Some(&["--version"]),
+    default_args: None,
+    auto_approve_flag: None,
+    initial_prompt_flag: Some("-c"),
+  },
+  ProviderGenerationConfig {
+    id: "kilocode",
+    cli: "kilocode",
+    version_args: Some(&["--version"]),
+    default_args: None,
+    auto_approve_flag: Some("--auto"),
+    initial_prompt_flag: Some(""),
+  },
+  ProviderGenerationConfig {
+    id: "kiro",
+    cli: "kiro-cli",
+    version_args: Some(&["--version"]),
+    default_args: Some(&["chat"]),
+    auto_approve_flag: None,
+    initial_prompt_flag: Some(""),
+  },
+  ProviderGenerationConfig {
+    id: "cline",
+    cli: "cline",
+    version_args: Some(&["help"]),
+    default_args: None,
+    auto_approve_flag: None,
+    initial_prompt_flag: Some(""),
+  },
+  ProviderGenerationConfig {
+    id: "codebuff",
+    cli: "codebuff",
+    version_args: Some(&["--version"]),
+    default_args: None,
+    auto_approve_flag: None,
+    initial_prompt_flag: Some(""),
+  },
+  ProviderGenerationConfig {
+    id: "mistral",
+    cli: "vibe",
+    version_args: Some(&["-h"]),
+    default_args: None,
+    auto_approve_flag: Some("--auto-approve"),
+    initial_prompt_flag: Some("--prompt"),
+  },
+];
+
+fn provider_generation_config(id: &str) -> Option<&'static ProviderGenerationConfig> {
+  PROVIDER_GENERATION_CONFIGS.iter().find(|provider| provider.id == id)
+}
 
 fn resolve_git_bin() -> String {
   if let Ok(val) = std::env::var("GIT_PATH") {
@@ -944,6 +1109,19 @@ fn add_files_from_output(output: &str, seen: &mut HashSet<String>, list: &mut Ve
   }
 }
 
+fn append_diff_summary(target: &mut String, addition: &str) {
+  let trimmed = addition.trim();
+  if trimmed.is_empty() {
+    return;
+  }
+  if target.trim().is_empty() {
+    *target = trimmed.to_string();
+  } else {
+    target.push('\n');
+    target.push_str(trimmed);
+  }
+}
+
 fn shortstat_counts(output: &str) -> (i64, i64, i64) {
   let trimmed = output.trim();
   if trimmed.is_empty() {
@@ -955,6 +1133,261 @@ fn shortstat_counts(output: &str) -> (i64, i64, i64) {
     adds.unwrap_or(0),
     dels.unwrap_or(0),
   )
+}
+
+fn truncate_string(value: &str, max_chars: usize) -> (String, bool) {
+  if max_chars == 0 {
+    return (String::new(), !value.is_empty());
+  }
+  let mut out = String::new();
+  let mut truncated = false;
+  for (idx, ch) in value.chars().enumerate() {
+    if idx >= max_chars {
+      truncated = true;
+      break;
+    }
+    out.push(ch);
+  }
+  (out, truncated)
+}
+
+fn build_pr_generation_prompt(diff: &str, commits: &[String]) -> String {
+  let commit_context = if commits.is_empty() {
+    String::new()
+  } else {
+    format!(
+      "\n\nCommits:\n{}",
+      commits
+        .iter()
+        .map(|commit| format!("- {}", commit))
+        .collect::<Vec<String>>()
+        .join("\n")
+    )
+  };
+
+  let diff_context = if diff.trim().is_empty() {
+    String::new()
+  } else {
+    let (snippet, truncated) = truncate_string(diff, 2000);
+    format!(
+      "\n\nDiff summary:\n{}{}",
+      snippet,
+      if truncated { "..." } else { "" }
+    )
+  };
+
+  format!(
+    r#"Generate a concise PR title and description based on these changes:
+
+{commit_context}{diff_context}
+
+Please respond in the following JSON format:
+{{
+  "title": "A concise PR title (max 72 chars, use conventional commit format if applicable)",
+  "description": "A well-structured markdown description using proper markdown formatting. Use ## for section headers, - or * for lists, `code` for inline code, and proper line breaks.
+
+Use actual newlines (\n in JSON) for line breaks, not literal \n text. Keep it straightforward and to the point."
+}}
+
+Only respond with valid JSON, no other text."#,
+    commit_context = commit_context,
+    diff_context = diff_context
+  )
+}
+
+fn parse_provider_response(response: &str) -> Option<(String, String)> {
+  let start = response.find('{')?;
+  let end = response.rfind('}')?;
+  if end <= start {
+    return None;
+  }
+  let slice = &response[start..=end];
+  let parsed: Value = serde_json::from_str(slice).ok()?;
+  let title = parsed.get("title")?.as_str()?.trim().to_string();
+  let mut description = parsed.get("description")?.as_str()?.to_string();
+
+  if description.contains("\\n") {
+    description = description.replace("\\n", "\n");
+  }
+  description = description.replace("\\\\n", "\n");
+  description = description.trim().to_string();
+
+  Some((title, description))
+}
+
+fn normalize_markdown(text: &str) -> String {
+  if text.trim().is_empty() {
+    return text.trim().to_string();
+  }
+
+  let mut lines: Vec<String> = Vec::new();
+  let mut prev_blank = false;
+
+  for line in text.lines() {
+    let trimmed_end = line.trim_end();
+    if trimmed_end.starts_with("##") {
+      if !lines.is_empty() && !prev_blank {
+        lines.push(String::new());
+      }
+    }
+    lines.push(trimmed_end.to_string());
+    prev_blank = trimmed_end.trim().is_empty();
+  }
+
+  let mut normalized = lines.join("\n");
+  while normalized.contains("\n\n\n") {
+    normalized = normalized.replace("\n\n\n", "\n\n");
+  }
+
+  normalized.trim().to_string()
+}
+
+#[derive(Default)]
+struct ProviderCommandOutput {
+  success: bool,
+  stdout: String,
+}
+
+fn run_provider_command(
+  command: &str,
+  args: &[String],
+  cwd: &Path,
+  prompt: Option<&str>,
+  timeout_ms: u64,
+) -> Option<ProviderCommandOutput> {
+  let mut cmd = Command::new(command);
+  cmd
+    .args(args)
+    .current_dir(cwd)
+    .stdin(Stdio::piped())
+    .stdout(Stdio::piped())
+    .stderr(Stdio::piped())
+    .env("TERM", "xterm-256color")
+    .env("COLORTERM", "truecolor");
+
+  let mut child = cmd.spawn().ok()?;
+
+  if let Some(mut stdin) = child.stdin.take() {
+    if let Some(prompt) = prompt {
+      if stdin.write_all(prompt.as_bytes()).is_err() {
+        let _ = child.kill();
+        return None;
+      }
+      if stdin.write_all(b"\n").is_err() {
+        let _ = child.kill();
+        return None;
+      }
+      let _ = stdin.flush();
+    }
+  }
+
+  let stdout_buf = Arc::new(Mutex::new(String::new()));
+  let stderr_buf = Arc::new(Mutex::new(String::new()));
+
+  let stdout_handle = if let Some(stdout) = child.stdout.take() {
+    let buf = stdout_buf.clone();
+    Some(std::thread::spawn(move || {
+      let mut reader = std::io::BufReader::new(stdout);
+      let mut contents = String::new();
+      let _ = reader.read_to_string(&mut contents);
+      *buf.lock().unwrap() = contents;
+    }))
+  } else {
+    None
+  };
+
+  let stderr_handle = if let Some(stderr) = child.stderr.take() {
+    let buf = stderr_buf.clone();
+    Some(std::thread::spawn(move || {
+      let mut reader = std::io::BufReader::new(stderr);
+      let mut contents = String::new();
+      let _ = reader.read_to_string(&mut contents);
+      *buf.lock().unwrap() = contents;
+    }))
+  } else {
+    None
+  };
+
+  let start = Instant::now();
+  let mut timed_out = false;
+  let status = loop {
+    if start.elapsed() >= Duration::from_millis(timeout_ms) {
+      timed_out = true;
+      let _ = child.kill();
+      let _ = child.wait();
+      break None;
+    }
+    match child.try_wait() {
+      Ok(Some(status)) => break Some(status),
+      Ok(None) => std::thread::sleep(Duration::from_millis(50)),
+      Err(_) => break None,
+    }
+  };
+
+  if let Some(handle) = stdout_handle {
+    let _ = handle.join();
+  }
+  if let Some(handle) = stderr_handle {
+    let _ = handle.join();
+  }
+
+  let stdout = stdout_buf.lock().unwrap().clone();
+  let _stderr = stderr_buf.lock().unwrap().clone();
+
+  let success = status.as_ref().map(|s| s.success()).unwrap_or(false) && !timed_out;
+  Some(ProviderCommandOutput {
+    success,
+    stdout,
+  })
+}
+
+fn generate_with_provider(
+  provider_id: &str,
+  task_path: &Path,
+  diff: &str,
+  commits: &[String],
+) -> Option<(String, String)> {
+  let provider = provider_generation_config(provider_id)?;
+  let version_args = provider.version_args.unwrap_or(&["--version"]);
+  if run_cmd(provider.cli, version_args, Some(task_path)).is_err() {
+    return None;
+  }
+
+  let prompt = build_pr_generation_prompt(diff, commits);
+  let mut args: Vec<String> = Vec::new();
+
+  if let Some(default_args) = provider.default_args {
+    args.extend(default_args.iter().map(|arg| arg.to_string()));
+  }
+  if let Some(flag) = provider.auto_approve_flag {
+    if !flag.trim().is_empty() {
+      args.push(flag.to_string());
+    }
+  }
+
+  let mut prompt_via_stdin = true;
+  if let Some(flag) = provider.initial_prompt_flag {
+    if !flag.is_empty() {
+      args.push(flag.to_string());
+      args.push(prompt.clone());
+      prompt_via_stdin = false;
+    }
+  }
+
+  let output = run_provider_command(
+    provider.cli,
+    &args,
+    task_path,
+    if prompt_via_stdin { Some(prompt.as_str()) } else { None },
+    30_000,
+  )?;
+
+  if !output.success {
+    return None;
+  }
+
+  let (title, description) = parse_provider_response(&output.stdout)?;
+  Some((title, normalize_markdown(&description)))
 }
 
 fn generate_pr_title(commits: &[String], changed_files: &[String]) -> String {
@@ -1154,8 +1587,27 @@ fn generate_fallback_content(changed_files: &[String]) -> (String, String) {
 }
 
 #[tauri::command]
-pub fn git_generate_pr_content(task_path: String, base: Option<String>) -> Value {
+pub fn git_generate_pr_content(
+  state: tauri::State<DbState>,
+  task_path: String,
+  base: Option<String>,
+) -> Value {
   let resolved_path = resolve_real_path(Path::new(&task_path));
+  let mut preferred_provider = db::task_agent_id_for_path(&state, &task_path);
+  if preferred_provider.is_none() {
+    let resolved_str = resolved_path.to_string_lossy();
+    if resolved_str != task_path {
+      preferred_provider = db::task_agent_id_for_path(&state, resolved_str.as_ref());
+    }
+  }
+  let preferred_provider = preferred_provider.and_then(|id| {
+    let trimmed = id.trim();
+    if trimmed.is_empty() {
+      None
+    } else {
+      Some(trimmed.to_string())
+    }
+  });
   if let Err(err) = run_git(&resolved_path, &["rev-parse", "--is-inside-work-tree"]) {
     return json!({ "success": false, "error": err });
   }
@@ -1176,6 +1628,7 @@ pub fn git_generate_pr_content(task_path: String, base: Option<String>) -> Value
   }
 
   let mut commits: Vec<String> = Vec::new();
+  let mut diff_summary = String::new();
   let mut changed_files: Vec<String> = Vec::new();
   let mut seen: HashSet<String> = HashSet::new();
   let mut file_count = 0;
@@ -1188,6 +1641,12 @@ pub fn git_generate_pr_content(task_path: String, base: Option<String>) -> Value
       &["log", &format!("{}..HEAD", base_ref), "--pretty=format:%s"],
     ) {
       commits = parse_output_lines(&output);
+    }
+    if let Ok(output) = run_git(
+      &resolved_path,
+      &["diff", &format!("{}...HEAD", base_ref), "--stat"],
+    ) {
+      append_diff_summary(&mut diff_summary, &output);
     }
     if let Ok(output) = run_git(
       &resolved_path,
@@ -1208,6 +1667,9 @@ pub fn git_generate_pr_content(task_path: String, base: Option<String>) -> Value
   if let Ok(output) = run_git(&resolved_path, &["diff", "--name-only"]) {
     add_files_from_output(&output, &mut seen, &mut changed_files);
   }
+  if let Ok(output) = run_git(&resolved_path, &["diff", "--stat"]) {
+    append_diff_summary(&mut diff_summary, &output);
+  }
   if let Ok(output) = run_git(&resolved_path, &["diff", "--shortstat"]) {
     let (files, adds, dels) = shortstat_counts(&output);
     file_count += files;
@@ -1218,6 +1680,9 @@ pub fn git_generate_pr_content(task_path: String, base: Option<String>) -> Value
   if commits.is_empty() && changed_files.is_empty() && file_count == 0 && insertions == 0 && deletions == 0 {
     if let Ok(output) = run_git(&resolved_path, &["diff", "--cached", "--name-only"]) {
       add_files_from_output(&output, &mut seen, &mut changed_files);
+    }
+    if let Ok(output) = run_git(&resolved_path, &["diff", "--cached", "--stat"]) {
+      append_diff_summary(&mut diff_summary, &output);
     }
     if let Ok(output) = run_git(&resolved_path, &["diff", "--cached", "--shortstat"]) {
       let (files, adds, dels) = shortstat_counts(&output);
@@ -1230,6 +1695,33 @@ pub fn git_generate_pr_content(task_path: String, base: Option<String>) -> Value
   if commits.is_empty() && changed_files.is_empty() && file_count == 0 && insertions == 0 && deletions == 0 {
     let (title, description) = generate_fallback_content(&changed_files);
     return json!({ "success": true, "title": title, "description": description });
+  }
+
+  let diff_for_prompt = diff_summary.trim().to_string();
+  let has_context = !diff_for_prompt.is_empty() || !commits.is_empty();
+
+  if has_context {
+    if let Some(provider_id) = preferred_provider {
+      if providers::is_valid_provider_id(&provider_id) {
+        if let Some((title, description)) =
+          generate_with_provider(&provider_id, &resolved_path, &diff_for_prompt, &commits)
+        {
+          return json!({ "success": true, "title": title, "description": description });
+        }
+      }
+    }
+
+    if let Some((title, description)) =
+      generate_with_provider("claude", &resolved_path, &diff_for_prompt, &commits)
+    {
+      return json!({ "success": true, "title": title, "description": description });
+    }
+
+    if let Some((title, description)) =
+      generate_with_provider("codex", &resolved_path, &diff_for_prompt, &commits)
+    {
+      return json!({ "success": true, "title": title, "description": description });
+    }
   }
 
   let title = generate_pr_title(&commits, &changed_files);

@@ -411,8 +411,8 @@ pub fn capture(app: &tauri::AppHandle, event: String, properties: Option<Value>)
 
   let mut props = Map::new();
   props.insert("distinct_id".to_string(), Value::String(instance_id));
-  if let Value::Object(mut base_props) = build_base_props(&config) {
-    for (key, value) in base_props.drain() {
+  if let Value::Object(base_props) = build_base_props(&config) {
+    for (key, value) in base_props {
       props.insert(key, value);
     }
   }
