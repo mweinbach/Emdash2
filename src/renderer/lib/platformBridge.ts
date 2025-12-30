@@ -246,6 +246,7 @@ export function installPlatformBridge() {
     ])
       .then(([{ invoke }, { listen }]) => {
         (window as any).electronAPI.__runtime = 'tauri';
+        (window as any).electronAPI.__runtimeReady = true;
         (window as any).electronAPI.getAppVersion = () => invoke<string>('app_get_version');
         (window as any).electronAPI.getPlatform = () => invoke<string>('app_get_platform');
         (window as any).electronAPI.openExternal = (url: string) =>
@@ -408,6 +409,7 @@ export function installPlatformBridge() {
             task_id: args.taskId,
             task_path: args.taskPath,
             script: args.script,
+            parent_project_path: args.parentProjectPath,
           });
         (window as any).electronAPI.hostPreviewStop = (taskId: string) =>
           invoke('host_preview_stop', { task_id: taskId });

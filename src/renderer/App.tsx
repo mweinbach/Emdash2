@@ -413,6 +413,48 @@ const AppContent: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    const waitForRuntimeReady = (timeoutMs = 1500) =>
+      new Promise<void>((resolve) => {
+        const api: any = (window as any).electronAPI;
+        if (api?.__runtimeReady) {
+          resolve();
+          return;
+        }
+        const start = Date.now();
+        const tick = () => {
+          if (cancelled) return;
+          if (api?.__runtimeReady) {
+            resolve();
+            return;
+          }
+          if (Date.now() - start >= timeoutMs) {
+            resolve();
+            return;
+          }
+          setTimeout(tick, 50);
+        };
+        tick();
+      });
+
+    const refreshCliProviders = async () => {
+      const api: any = (window as any).electronAPI;
+      if (!api?.getProviderStatuses) return;
+      if (api?.__runtime !== 'tauri') return;
+      await waitForRuntimeReady();
+      if (cancelled) return;
+      try {
+        await api.getProviderStatuses({ refresh: true });
+      } catch {}
+    };
+
+    void refreshCliProviders();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const handleOpenProject = async () => {
     const { captureTelemetry } = await import('./lib/telemetryClient');
     captureTelemetry('project_add_clicked');

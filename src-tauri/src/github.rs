@@ -215,24 +215,48 @@ pub fn github_check_cli_installed() -> bool {
 
 #[tauri::command]
 pub fn github_install_cli() -> Value {
-  if !cfg!(target_os = "macos") {
-    return json!({
-      "success": false,
-      "error": "Automatic install is only implemented for macOS"
-    });
+  if cfg!(target_os = "macos") {
+    if !run_command("which", &["brew"], None).is_ok() {
+      return json!({
+        "success": false,
+        "error": "Homebrew not found. Please install from https://brew.sh/ first."
+      });
+    }
+
+    return match run_command("brew", &["install", "gh"], None) {
+      Ok(_) => json!({ "success": true }),
+      Err(err) => json!({ "success": false, "error": err }),
+    };
   }
 
-  if !run_command("which", &["brew"], None).is_ok() {
-    return json!({
-      "success": false,
-      "error": "Homebrew not found. Please install from https://brew.sh/ first."
-    });
+  if cfg!(target_os = "linux") {
+    return match run_command(
+      "sh",
+      &["-c", "sudo apt update && sudo apt install -y gh"],
+      None,
+    ) {
+      Ok(_) => json!({ "success": true }),
+      Err(_) => json!({
+        "success": false,
+        "error": "Could not install gh CLI. Please install manually: https://cli.github.com/"
+      }),
+    };
   }
 
-  match run_command("brew", &["install", "gh"], None) {
-    Ok(_) => json!({ "success": true }),
-    Err(err) => json!({ "success": false, "error": err }),
+  if cfg!(target_os = "windows") {
+    return match run_command("winget", &["install", "GitHub.cli"], None) {
+      Ok(_) => json!({ "success": true }),
+      Err(_) => json!({
+        "success": false,
+        "error": "Could not install gh CLI. Please install manually: https://cli.github.com/"
+      }),
+    };
   }
+
+  json!({
+    "success": false,
+    "error": format!("Unsupported platform: {}", std::env::consts::OS)
+  })
 }
 
 #[tauri::command]

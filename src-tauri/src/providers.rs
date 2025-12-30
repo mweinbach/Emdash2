@@ -72,7 +72,7 @@ fn load_cache(path: &Path) -> HashMap<String, ProviderStatus> {
   HashMap::new()
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 struct ProviderDef {
   id: &'static str,
   commands: &'static [&'static str],
@@ -136,6 +136,11 @@ const PROVIDERS: &[ProviderDef] = &[
     args: &["--version"],
   },
   ProviderDef {
+    id: "goose",
+    commands: &["goose"],
+    args: &["--version"],
+  },
+  ProviderDef {
     id: "kimi",
     commands: &["kimi"],
     args: &["--version"],
@@ -171,6 +176,10 @@ const PROVIDERS: &[ProviderDef] = &[
     args: &["-h"],
   },
 ];
+
+pub fn is_valid_provider_id(id: &str) -> bool {
+  PROVIDERS.iter().any(|provider| provider.id == id)
+}
 
 #[derive(Default, Clone)]
 struct CommandResult {
@@ -358,14 +367,14 @@ pub struct ProviderStatusOptions {
 }
 
 #[tauri::command]
-pub fn providers_get_statuses(
+pub async fn providers_get_statuses(
   app: AppHandle,
-  state: tauri::State<ProviderState>,
+  state: tauri::State<'_, ProviderState>,
   opts: Option<ProviderStatusOptions>,
-) -> Value {
+) -> Result<Value, String> {
   let refresh = opts.as_ref().and_then(|o| o.refresh).unwrap_or(false);
   if !refresh {
-    return json!({ "success": true, "statuses": state.all() });
+    return Ok(json!({ "success": true, "statuses": state.all() }));
   }
 
   let opts_ref = opts.as_ref();
@@ -383,21 +392,44 @@ pub fn providers_get_statuses(
     PROVIDERS.iter().map(|p| p.id.to_string()).collect()
   };
 
-  let now = chrono::Utc::now().timestamp_millis();
+  let mut defs: Vec<ProviderDef> = Vec::new();
   for id in requested {
     if let Some(def) = PROVIDERS.iter().find(|p| p.id == id) {
-      let res = check_provider(def, 3000);
-      let status = ProviderStatus {
-        installed: compute_status(&res),
-        path: res.resolved_path,
-        version: res.version,
-        last_checked: now,
-      };
-      state.set(def.id, status.clone());
-      let payload = json!({ "providerId": def.id, "status": status });
-      let _ = app.emit("provider:status-updated", payload);
+      defs.push(*def);
     }
   }
 
-  json!({ "success": true, "statuses": state.all() })
+  const TIMEOUT_MS: u64 = 3000;
+  const MAX_PARALLEL: usize = 4;
+  let mut index = 0;
+  while index < defs.len() {
+    let end = std::cmp::min(index + MAX_PARALLEL, defs.len());
+    let batch = &defs[index..end];
+    let mut handles = Vec::with_capacity(batch.len());
+    for def in batch {
+      let def_copy = *def;
+      handles.push(tauri::async_runtime::spawn_blocking(move || {
+        let res = check_provider(&def_copy, TIMEOUT_MS);
+        (def_copy.id, res)
+      }));
+    }
+
+    for handle in handles {
+      if let Ok((id, res)) = handle.await {
+        let status = ProviderStatus {
+          installed: compute_status(&res),
+          path: res.resolved_path,
+          version: res.version,
+          last_checked: chrono::Utc::now().timestamp_millis(),
+        };
+        state.set(id, status.clone());
+        let payload = json!({ "providerId": id, "status": status });
+        let _ = app.emit("provider:status-updated", payload);
+      }
+    }
+
+    index = end;
+  }
+
+  Ok(json!({ "success": true, "statuses": state.all() }))
 }

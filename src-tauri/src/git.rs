@@ -1,5 +1,6 @@
 use serde::Serialize;
 use serde_json::{json, Value};
+use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -926,12 +927,314 @@ pub fn git_list_remote_branches(project_path: String, remote: Option<String>) ->
   json!({ "success": true, "branches": branches })
 }
 
+fn parse_output_lines(output: &str) -> Vec<String> {
+  output
+    .lines()
+    .map(|line| line.trim())
+    .filter(|line| !line.is_empty())
+    .map(|line| line.to_string())
+    .collect()
+}
+
+fn add_files_from_output(output: &str, seen: &mut HashSet<String>, list: &mut Vec<String>) {
+  for line in parse_output_lines(output) {
+    if seen.insert(line.clone()) {
+      list.push(line);
+    }
+  }
+}
+
+fn shortstat_counts(output: &str) -> (i64, i64, i64) {
+  let trimmed = output.trim();
+  if trimmed.is_empty() {
+    return (0, 0, 0);
+  }
+  let (files, adds, dels) = parse_shortstat(trimmed);
+  (
+    files.unwrap_or(0),
+    adds.unwrap_or(0),
+    dels.unwrap_or(0),
+  )
+}
+
+fn generate_pr_title(commits: &[String], changed_files: &[String]) -> String {
+  let prefixes = [
+    "feat", "fix", "chore", "docs", "style", "refactor", "test", "perf", "ci", "build", "revert",
+  ];
+
+  if let Some(first) = commits.first() {
+    let lower = first.to_lowercase();
+    let mut prefix: Option<&str> = None;
+    for candidate in prefixes.iter() {
+      let marker = format!("{}:", candidate);
+      if lower.starts_with(&marker) {
+        prefix = Some(candidate);
+        break;
+      }
+    }
+
+    if let Some(prefix) = prefix {
+      let cleaned = first
+        .splitn(2, ':')
+        .nth(1)
+        .unwrap_or("")
+        .trim()
+        .to_string();
+      let mut title = cleaned;
+      if title.len() > 72 {
+        title = format!("{}...", &title[..69]);
+      }
+      return format!("{}: {}", prefix, title);
+    }
+
+    let mut title = first.trim().to_string();
+    if title.len() > 72 {
+      title = format!("{}...", &title[..69]);
+    }
+    return title;
+  }
+
+  if let Some(first_file) = changed_files.first() {
+    let file_name = Path::new(first_file)
+      .file_name()
+      .and_then(|s| s.to_str())
+      .unwrap_or(first_file.as_str());
+    let base_name = file_name
+      .rsplit_once('.')
+      .map(|(base, _)| base)
+      .unwrap_or(file_name);
+    let lower = file_name.to_lowercase();
+
+    if lower.contains("test") || lower.contains("spec") {
+      return "test: add tests".to_string();
+    }
+    if lower.contains("fix") || lower.contains("bug") || lower.contains("error") {
+      return "fix: resolve issue".to_string();
+    }
+    if lower.contains("feat") || lower.contains("feature") || lower.contains("add") {
+      return "feat: add feature".to_string();
+    }
+
+    if base_name
+      .chars()
+      .next()
+      .map(|c| c.is_uppercase())
+      .unwrap_or(false)
+    {
+      return format!("feat: add {}", base_name);
+    }
+
+    let target = if !base_name.is_empty() { base_name } else { file_name };
+    return format!("chore: update {}", target);
+  }
+
+  "chore: update code".to_string()
+}
+
+fn generate_pr_description(
+  commits: &[String],
+  changed_files: &[String],
+  file_count: i64,
+  insertions: i64,
+  deletions: i64,
+) -> String {
+  let mut parts: Vec<String> = Vec::new();
+
+  if !commits.is_empty() {
+    parts.push("## Changes".to_string());
+    for commit in commits {
+      parts.push(format!("- {}", commit));
+    }
+  }
+
+  if !changed_files.is_empty() {
+    if changed_files.len() == 1 && file_count == 1 {
+      parts.push(String::new());
+      parts.push("## Summary".to_string());
+      parts.push(format!("- Updated `{}`", changed_files[0]));
+      if insertions > 0 || deletions > 0 {
+        let mut changes: Vec<String> = Vec::new();
+        if insertions > 0 {
+          changes.push(format!("+{}", insertions));
+        }
+        if deletions > 0 {
+          changes.push(format!("-{}", deletions));
+        }
+        if !changes.is_empty() {
+          parts.push(format!("- {} lines", changes.join(", ")));
+        }
+      }
+    } else {
+      parts.push(String::new());
+      parts.push("## Files Changed".to_string());
+      for file in changed_files.iter().take(20) {
+        parts.push(format!("- `{}`", file));
+      }
+      if changed_files.len() > 20 {
+        parts.push(format!(
+          "... and {} more files",
+          changed_files.len().saturating_sub(20)
+        ));
+      }
+
+      if file_count > 0 || insertions > 0 || deletions > 0 {
+        parts.push(String::new());
+        parts.push("## Summary".to_string());
+        if file_count > 0 {
+          parts.push(format!(
+            "- {} file{} changed",
+            file_count,
+            if file_count == 1 { "" } else { "s" }
+          ));
+        }
+        if insertions > 0 || deletions > 0 {
+          let mut changes: Vec<String> = Vec::new();
+          if insertions > 0 {
+            changes.push(format!("+{}", insertions));
+          }
+          if deletions > 0 {
+            changes.push(format!("-{}", deletions));
+          }
+          parts.push(format!("- {} lines", changes.join(", ")));
+        }
+      }
+    }
+  } else if file_count > 0 || insertions > 0 || deletions > 0 {
+    parts.push(String::new());
+    parts.push("## Summary".to_string());
+    if file_count > 0 {
+      parts.push(format!(
+        "- {} file{} changed",
+        file_count,
+        if file_count == 1 { "" } else { "s" }
+      ));
+    }
+    if insertions > 0 || deletions > 0 {
+      let mut changes: Vec<String> = Vec::new();
+      if insertions > 0 {
+        changes.push(format!("+{}", insertions));
+      }
+      if deletions > 0 {
+        changes.push(format!("-{}", deletions));
+      }
+      parts.push(format!("- {} lines", changes.join(", ")));
+    }
+  }
+
+  let description = parts.join("\n").trim().to_string();
+  if description.is_empty() {
+    "No description available.".to_string()
+  } else {
+    description
+  }
+}
+
+fn generate_fallback_content(changed_files: &[String]) -> (String, String) {
+  let title = if let Some(first) = changed_files.first() {
+    let name = Path::new(first)
+      .file_name()
+      .and_then(|s| s.to_str())
+      .unwrap_or("files");
+    format!("chore: update {}", name)
+  } else {
+    "chore: update code".to_string()
+  };
+
+  let description = if !changed_files.is_empty() {
+    format!(
+      "Updated {} file{}.",
+      changed_files.len(),
+      if changed_files.len() == 1 { "" } else { "s" }
+    )
+  } else {
+    "No changes detected.".to_string()
+  };
+
+  (title, description)
+}
+
 #[tauri::command]
-pub fn git_generate_pr_content(_task_path: String, _base: Option<String>) -> Value {
-  json!({
-    "success": false,
-    "error": "PR content generation is not implemented in the Tauri backend yet"
-  })
+pub fn git_generate_pr_content(task_path: String, base: Option<String>) -> Value {
+  let resolved_path = resolve_real_path(Path::new(&task_path));
+  if let Err(err) = run_git(&resolved_path, &["rev-parse", "--is-inside-work-tree"]) {
+    return json!({ "success": false, "error": err });
+  }
+
+  let _ = run_git(&resolved_path, &["fetch", "origin", "--quiet"]);
+
+  let base_branch = base
+    .map(|b| b.trim().to_string())
+    .filter(|b| !b.is_empty())
+    .unwrap_or_else(|| DEFAULT_BRANCH.to_string());
+
+  let mut base_ref: Option<String> = None;
+  let origin_ref = format!("origin/{}", base_branch);
+  if run_git(&resolved_path, &["rev-parse", "--verify", origin_ref.as_str()]).is_ok() {
+    base_ref = Some(origin_ref);
+  } else if run_git(&resolved_path, &["rev-parse", "--verify", base_branch.as_str()]).is_ok() {
+    base_ref = Some(base_branch.clone());
+  }
+
+  let mut commits: Vec<String> = Vec::new();
+  let mut changed_files: Vec<String> = Vec::new();
+  let mut seen: HashSet<String> = HashSet::new();
+  let mut file_count = 0;
+  let mut insertions = 0;
+  let mut deletions = 0;
+
+  if let Some(ref base_ref) = base_ref {
+    if let Ok(output) = run_git(
+      &resolved_path,
+      &["log", &format!("{}..HEAD", base_ref), "--pretty=format:%s"],
+    ) {
+      commits = parse_output_lines(&output);
+    }
+    if let Ok(output) = run_git(
+      &resolved_path,
+      &["diff", "--name-only", &format!("{}...HEAD", base_ref)],
+    ) {
+      add_files_from_output(&output, &mut seen, &mut changed_files);
+    }
+    if let Ok(output) =
+      run_git(&resolved_path, &["diff", "--shortstat", &format!("{}...HEAD", base_ref)])
+    {
+      let (files, adds, dels) = shortstat_counts(&output);
+      file_count += files;
+      insertions += adds;
+      deletions += dels;
+    }
+  }
+
+  if let Ok(output) = run_git(&resolved_path, &["diff", "--name-only"]) {
+    add_files_from_output(&output, &mut seen, &mut changed_files);
+  }
+  if let Ok(output) = run_git(&resolved_path, &["diff", "--shortstat"]) {
+    let (files, adds, dels) = shortstat_counts(&output);
+    file_count += files;
+    insertions += adds;
+    deletions += dels;
+  }
+
+  if commits.is_empty() && changed_files.is_empty() && file_count == 0 && insertions == 0 && deletions == 0 {
+    if let Ok(output) = run_git(&resolved_path, &["diff", "--cached", "--name-only"]) {
+      add_files_from_output(&output, &mut seen, &mut changed_files);
+    }
+    if let Ok(output) = run_git(&resolved_path, &["diff", "--cached", "--shortstat"]) {
+      let (files, adds, dels) = shortstat_counts(&output);
+      file_count += files;
+      insertions += adds;
+      deletions += dels;
+    }
+  }
+
+  if commits.is_empty() && changed_files.is_empty() && file_count == 0 && insertions == 0 && deletions == 0 {
+    let (title, description) = generate_fallback_content(&changed_files);
+    return json!({ "success": true, "title": title, "description": description });
+  }
+
+  let title = generate_pr_title(&commits, &changed_files);
+  let description = generate_pr_description(&commits, &changed_files, file_count, insertions, deletions);
+  json!({ "success": true, "title": title, "description": description })
 }
 
 #[tauri::command]

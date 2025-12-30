@@ -13,6 +13,8 @@ mod telemetry;
 use tauri::Manager;
 
 use serde_json::{json, Value};
+use std::path::Path;
+use std::process::{Command, Stdio};
 
 #[tauri::command]
 fn app_get_version(app: tauri::AppHandle) -> String {
@@ -40,8 +42,18 @@ fn app_open_external(app: tauri::AppHandle, url: String) -> Value {
 }
 
 #[tauri::command]
-fn app_open_in(app: String, path: String) -> Value {
-  match open_in(app.as_str(), path.as_str()) {
+fn app_open_in(app_handle: tauri::AppHandle, app: String, path: String) -> Value {
+  let target = app.trim();
+  let target_path = path.trim();
+  if target.is_empty() || target_path.is_empty() {
+    return json!({ "success": false, "error": "Invalid arguments" });
+  }
+
+  if matches!(target, "cursor" | "vscode" | "zed") {
+    maybe_prepare_project(&app_handle, target_path);
+  }
+
+  match open_in(target, target_path) {
     Ok(_) => json!({ "success": true }),
     Err(err) => json!({ "success": false, "error": err }),
   }
@@ -87,8 +99,12 @@ fn telemetry_set_onboarding_seen(app: tauri::AppHandle, flag: bool) -> Result<Va
 }
 
 #[tauri::command]
-fn telemetry_capture(_event: String, _properties: Option<Value>) -> Result<Value, String> {
-  Ok(json!({ "success": true }))
+fn telemetry_capture(
+  app: tauri::AppHandle,
+  event: String,
+  properties: Option<Value>,
+) -> Result<Value, String> {
+  Ok(telemetry::capture(&app, event, properties))
 }
 
 fn main() {
@@ -172,46 +188,263 @@ fn main() {
     .expect("error while running tauri application");
 }
 
-fn open_in(app: &str, path: &str) -> Result<(), String> {
-  if !cfg!(target_os = "macos") {
-    return Err("Open in is only implemented for macOS".to_string());
+fn command_exists(command: &str) -> bool {
+  let resolver = if cfg!(target_os = "windows") {
+    "where"
+  } else {
+    "which"
+  };
+  Command::new(resolver)
+    .arg(command)
+    .stdout(Stdio::null())
+    .stderr(Stdio::null())
+    .status()
+    .map(|status| status.success())
+    .unwrap_or(false)
+}
+
+fn try_command(command: &str, args: &[&str]) -> bool {
+  Command::new(command)
+    .args(args)
+    .stdout(Stdio::null())
+    .stderr(Stdio::null())
+    .status()
+    .map(|status| status.success())
+    .unwrap_or(false)
+}
+
+fn run_shell_command(command: &str) -> bool {
+  let mut cmd = if cfg!(target_os = "windows") {
+    let mut cmd = Command::new("cmd");
+    cmd.args(["/C", command]);
+    cmd
+  } else {
+    let mut cmd = Command::new("sh");
+    cmd.args(["-c", command]);
+    cmd
+  };
+
+  cmd.stdout(Stdio::null()).stderr(Stdio::null());
+  cmd.status().map(|status| status.success()).unwrap_or(false)
+}
+
+fn pick_node_install_cmds(target: &Path) -> Vec<String> {
+  if target.join("pnpm-lock.yaml").exists() {
+    return vec![
+      "pnpm install --frozen-lockfile",
+      "pnpm install",
+      "npm ci",
+      "npm install",
+    ]
+    .into_iter()
+    .map(String::from)
+    .collect();
   }
+  if target.join("yarn.lock").exists() {
+    return vec![
+      "yarn install --immutable",
+      "yarn install --frozen-lockfile",
+      "yarn install",
+      "npm ci",
+      "npm install",
+    ]
+    .into_iter()
+    .map(String::from)
+    .collect();
+  }
+  if target.join("bun.lockb").exists() || target.join("bun.lock").exists() {
+    return vec!["bun install", "npm ci", "npm install"]
+      .into_iter()
+      .map(String::from)
+      .collect();
+  }
+  if target.join("package-lock.json").exists() {
+    return vec!["npm ci", "npm install"]
+      .into_iter()
+      .map(String::from)
+      .collect();
+  }
+  vec!["npm install".to_string()]
+}
+
+fn spawn_background_install(target: &Path, cmds: &[String]) {
+  if cmds.is_empty() {
+    return;
+  }
+  let chain = cmds.join(" || ");
+  let mut cmd = if cfg!(target_os = "windows") {
+    let mut cmd = Command::new("cmd");
+    cmd.args(["/C", &chain]);
+    cmd
+  } else {
+    let mut cmd = Command::new("sh");
+    cmd.args(["-c", &chain]);
+    cmd
+  };
+
+  cmd
+    .current_dir(target)
+    .stdin(Stdio::null())
+    .stdout(Stdio::null())
+    .stderr(Stdio::null());
+  let _ = cmd.spawn();
+}
+
+fn should_auto_install(app: &tauri::AppHandle) -> bool {
+  let settings = settings::load_settings(app);
+  settings
+    .get("projectPrep")
+    .and_then(|v| v.get("autoInstallOnOpenInEditor"))
+    .and_then(|v| v.as_bool())
+    .unwrap_or(true)
+}
+
+fn maybe_prepare_project(app: &tauri::AppHandle, target_path: &str) {
+  if !should_auto_install(app) {
+    return;
+  }
+  let target = Path::new(target_path);
+  if !target.exists() {
+    return;
+  }
+  if !target.join("package.json").exists() {
+    return;
+  }
+  if target.join("node_modules").exists() {
+    return;
+  }
+  let cmds = pick_node_install_cmds(target);
+  spawn_background_install(target, &cmds);
+}
+
+fn open_in(app: &str, path: &str) -> Result<(), String> {
   if path.trim().is_empty() {
     return Err("Invalid path".to_string());
   }
+  let supported = matches!(
+    app,
+    "finder" | "cursor" | "vscode" | "terminal" | "ghostty" | "zed" | "iterm2" | "warp"
+  );
+  if !supported {
+    return Err("Unsupported platform or app".to_string());
+  }
 
-  let open_cmd = |args: &[&str]| -> Result<(), String> {
-    let status = std::process::Command::new("open")
-      .args(args)
-      .status()
-      .map_err(|err| err.to_string())?;
-    if status.success() {
-      Ok(())
-    } else {
-      Err("Failed to open target app".to_string())
+  if cfg!(target_os = "windows") && (app == "ghostty" || app == "zed") {
+    return Err(format!("{} is not supported on Windows", app));
+  }
+  if !cfg!(target_os = "macos") && app == "iterm2" {
+    return Err("iTerm2 is only available on macOS".to_string());
+  }
+
+  if app == "warp" {
+    let urls = [
+      format!("warp://action/new_window?path={}", urlencoding::encode(path)),
+      format!(
+        "warppreview://action/new_window?path={}",
+        urlencoding::encode(path)
+      ),
+    ];
+    for url in urls {
+      if open::that(url).is_ok() {
+        return Ok(());
+      }
+    }
+    return Err("Warp is not installed or its URI scheme is not registered on this platform.".to_string());
+  }
+
+  let opened = if cfg!(target_os = "macos") {
+    match app {
+      "finder" => try_command("open", &[path]),
+      "terminal" => try_command("open", &["-a", "Terminal", path]),
+      "iterm2" => {
+        try_command("open", &["-b", "com.googlecode.iterm2", path])
+          || try_command("open", &["-a", "iTerm", path])
+          || try_command("open", &["-a", "iTerm2", path])
+      }
+      "ghostty" => {
+        try_command("open", &["-b", "com.mitchellh.ghostty", path])
+          || try_command("open", &["-a", "Ghostty", path])
+      }
+      "cursor" => {
+        if command_exists("cursor") && try_command("cursor", &[path]) {
+          true
+        } else {
+          try_command("open", &["-a", "Cursor", path])
+        }
+      }
+      "vscode" => {
+        try_command("open", &["-b", "com.microsoft.VSCode", "--args", path])
+          || try_command("open", &["-b", "com.microsoft.VSCodeInsiders", "--args", path])
+          || try_command("open", &["-a", "Visual Studio Code", path])
+      }
+      "zed" => {
+        if command_exists("zed") && try_command("zed", &[path]) {
+          true
+        } else {
+          try_command("open", &["-a", "Zed", path])
+        }
+      }
+      _ => false,
+    }
+  } else if cfg!(target_os = "windows") {
+    let quoted = |value: &str| format!("\"{}\"", value.replace('"', "\\\""));
+    match app {
+      "finder" => try_command("explorer", &[path]),
+      "cursor" => {
+        try_command("cursor", &[path])
+          || run_shell_command(&format!("start \"\" cursor {}", quoted(path)))
+      }
+      "vscode" => {
+        try_command("code", &[path])
+          || try_command("code-insiders", &[path])
+          || run_shell_command(&format!("start \"\" code {}", quoted(path)))
+          || run_shell_command(&format!("start \"\" code-insiders {}", quoted(path)))
+      }
+      "terminal" => {
+        if try_command("wt", &["-d", path]) {
+          true
+        } else {
+          let escaped = path.replace('"', "\\\"");
+          run_shell_command(&format!("start cmd /K \"cd /d \\\"{}\\\"\"", escaped))
+        }
+      }
+      _ => false,
+    }
+  } else {
+    match app {
+      "finder" => try_command("xdg-open", &[path]),
+      "cursor" => try_command("cursor", &[path]),
+      "vscode" => try_command("code", &[path]) || try_command("code-insiders", &[path]),
+      "terminal" => {
+        try_command("x-terminal-emulator", &[&format!("--working-directory={}", path)])
+          || try_command("gnome-terminal", &[&format!("--working-directory={}", path)])
+          || try_command("konsole", &["--workdir", path])
+      }
+      "ghostty" => {
+        try_command("ghostty", &[&format!("--working-directory={}", path)])
+          || try_command("x-terminal-emulator", &[&format!("--working-directory={}", path)])
+      }
+      "zed" => try_command("zed", &[path]) || try_command("xdg-open", &[path]),
+      _ => false,
     }
   };
 
-  match app {
-    "finder" => open_cmd(&[path]),
-    "terminal" => open_cmd(&["-a", "Terminal", path]),
-    "iterm2" => open_cmd(&["-b", "com.googlecode.iterm2", path])
-      .or_else(|_| open_cmd(&["-a", "iTerm", path]))
-      .or_else(|_| open_cmd(&["-a", "iTerm2", path])),
-    "ghostty" => open_cmd(&["-b", "com.mitchellh.ghostty", path])
-      .or_else(|_| open_cmd(&["-a", "Ghostty", path])),
-    "cursor" => open_cmd(&["-a", "Cursor", path]),
-    "vscode" => open_cmd(&["-b", "com.microsoft.VSCode", "--args", path])
-      .or_else(|_| open_cmd(&["-b", "com.microsoft.VSCodeInsiders", "--args", path]))
-      .or_else(|_| open_cmd(&["-a", "Visual Studio Code", path])),
-    "zed" => open_cmd(&["-a", "Zed", path]),
-    "warp" => {
-      let url = format!("warp://action/new_window?path={}", urlencoding::encode(path));
-      open_cmd(&[&url]).or_else(|_| {
-        let preview = format!("warppreview://action/new_window?path={}", urlencoding::encode(path));
-        open_cmd(&[&preview])
-      })
-    }
-    _ => Err("Unsupported target app".to_string()),
+  if opened {
+    return Ok(());
   }
+
+  let pretty = match app {
+    "ghostty" => "Ghostty",
+    "zed" => "Zed",
+    "iterm2" => "iTerm2",
+    "warp" => "Warp",
+    _ => app,
+  };
+  let msg = match app {
+    "ghostty" => "Ghostty is not installed or not available on this platform.".to_string(),
+    "zed" => "Zed is not installed or not available on this platform.".to_string(),
+    "iterm2" => "iTerm2 is not installed or not available on this platform.".to_string(),
+    _ => format!("Unable to open in {}", pretty),
+  };
+  Err(msg)
 }

@@ -52,6 +52,22 @@ fn detect_package_manager(dir: &Path) -> &'static str {
   "npm"
 }
 
+fn try_link_node_modules(task_path: &Path, parent_path: &Path) {
+  let ws_nm = task_path.join("node_modules");
+  let parent_nm = parent_path.join("node_modules");
+  if ws_nm.exists() || !parent_nm.exists() {
+    return;
+  }
+  #[cfg(unix)]
+  {
+    let _ = std::os::unix::fs::symlink(&parent_nm, &ws_nm);
+  }
+  #[cfg(windows)]
+  {
+    let _ = std::os::windows::fs::symlink_dir(&parent_nm, &ws_nm);
+  }
+}
+
 fn normalize_url(line: &str) -> Option<String> {
   let needles = [
     "http://localhost",
@@ -235,6 +251,7 @@ pub fn host_preview_start(
   task_id: String,
   task_path: String,
   script: Option<String>,
+  parent_project_path: Option<String>,
 ) -> Value {
   let cwd = PathBuf::from(&task_path);
   if !cwd.exists() {
@@ -246,6 +263,13 @@ pub fn host_preview_start(
     let mut map = state.procs.lock().unwrap();
     if let Some(mut child) = map.remove(&task_id) {
       let _ = child.kill();
+    }
+  }
+
+  if let Some(parent) = parent_project_path.as_ref().map(|s| s.trim()).filter(|s| !s.is_empty()) {
+    let parent_path = PathBuf::from(parent);
+    if parent_path.exists() {
+      try_link_node_modules(&cwd, &parent_path);
     }
   }
 

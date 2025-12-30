@@ -2,7 +2,7 @@ use serde_json::{json, Map, Value};
 use std::path::PathBuf;
 use tauri::Manager;
 
-use crate::storage;
+use crate::{providers, storage};
 
 const SETTINGS_FILE: &str = "settings.json";
 
@@ -170,15 +170,27 @@ fn normalize_settings(value: Value, app: &tauri::AppHandle) -> Value {
 
   if let Some(projects) = obj.get_mut("projects").and_then(Value::as_object_mut) {
     let default_dir = default_projects_dir(app);
-    let dir = coerce_string(projects.get("defaultDirectory"), &default_dir);
+    let mut dir = coerce_string(projects.get("defaultDirectory"), &default_dir);
+    if dir.starts_with('~') {
+      if let Ok(home) = app.path().home_dir() {
+        let stripped = dir.trim_start_matches('~');
+        dir = home.join(stripped).to_string_lossy().to_string();
+      }
+    }
     projects.insert("defaultDirectory".to_string(), Value::String(dir));
   }
 
-  if let Some(default_provider) = obj.get("defaultProvider") {
-    if default_provider.is_null() {
-      obj.insert("defaultProvider".to_string(), Value::String("claude".to_string()));
-    }
-  }
+  let normalized_provider = obj
+    .get("defaultProvider")
+    .and_then(Value::as_str)
+    .map(|v| v.trim())
+    .filter(|v| !v.is_empty())
+    .filter(|v| providers::is_valid_provider_id(v))
+    .unwrap_or("claude");
+  obj.insert(
+    "defaultProvider".to_string(),
+    Value::String(normalized_provider.to_string()),
+  );
 
   Value::Object(obj.clone())
 }
