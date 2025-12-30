@@ -77,7 +77,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
     onClose();
   }, [onClose]);
 
-  // Window-level capture handler to intercept Escape before xterm processes it
+  // Window-level capture handler to intercept Escape before terminal input processes it
   useEffect(() => {
     if (!isOpen) return;
 
@@ -89,7 +89,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
       }
     };
 
-    // Use capture phase at window level to intercept before xterm
+    // Use capture phase at window level to intercept before terminal handlers
     window.addEventListener('keydown', handleEscapeCapture, true);
     return () => window.removeEventListener('keydown', handleEscapeCapture, true);
   }, [isOpen, handleClose]);

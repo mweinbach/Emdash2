@@ -20,6 +20,7 @@ declare global {
         id: string;
         cwd?: string;
         shell?: string;
+        command?: string;
         env?: Record<string, string>;
         cols?: number;
         rows?: number;
@@ -45,6 +46,39 @@ declare global {
         id: string,
         listener: (info: { exitCode: number; signal?: number }) => void
       ) => () => void;
+      onPtyStarted: (listener: (data: { id: string }) => void) => () => void;
+      terminalGetTheme: () => Promise<{
+        ok: boolean;
+        config?: {
+          terminal: string;
+          theme: {
+            background?: string;
+            foreground?: string;
+            cursor?: string;
+            cursorAccent?: string;
+            selectionBackground?: string;
+            black?: string;
+            red?: string;
+            green?: string;
+            yellow?: string;
+            blue?: string;
+            magenta?: string;
+            cyan?: string;
+            white?: string;
+            brightBlack?: string;
+            brightRed?: string;
+            brightGreen?: string;
+            brightYellow?: string;
+            brightBlue?: string;
+            brightMagenta?: string;
+            brightCyan?: string;
+            brightWhite?: string;
+            fontFamily?: string;
+            fontSize?: number;
+          };
+        };
+        error?: string;
+      }>;
       // Worktree management
       worktreeCreate: (args: {
         projectPath: string;

@@ -1,7 +1,4 @@
-import { Terminal, type ITerminalOptions } from '@xterm/xterm';
-import { FitAddon } from '@xterm/addon-fit';
-import { WebglAddon } from '@xterm/addon-webgl';
-import { SerializeAddon } from '@xterm/addon-serialize';
+import { FitAddon, Terminal, type ITerminalOptions } from 'ghostty-web';
 import { ensureTerminalHost } from './terminalHost';
 import { TerminalMetrics } from './TerminalMetrics';
 import { log } from '../lib/logger';
@@ -38,8 +35,6 @@ export class TerminalSessionManager {
   readonly id: string;
   private readonly terminal: Terminal;
   private readonly fitAddon: FitAddon;
-  private readonly serializeAddon: SerializeAddon;
-  private webglAddon: WebglAddon | null = null;
   private readonly metrics: TerminalMetrics;
   private readonly container: HTMLDivElement;
   private attachedContainer: HTMLElement | null = null;
@@ -55,10 +50,10 @@ export class TerminalSessionManager {
   private readonly exitListeners = new Set<
     (info: { exitCode: number | undefined; signal?: number }) => void
   >();
-  private firstFrameRendered = false;
   private ptyStarted = false;
   private lastSnapshotAt: number | null = null;
   private lastSnapshotReason: 'interval' | 'detach' | 'dispose' | null = null;
+  private hasSnapshot = false;
 
   constructor(private readonly options: TerminalSessionOptions) {
     this.id = options.taskId;
@@ -69,6 +64,7 @@ export class TerminalSessionManager {
       width: '100%',
       height: '100%',
       display: 'block',
+      position: 'relative',
     } as CSSStyleDeclaration);
     ensureTerminalHost().appendChild(this.container);
 
@@ -79,28 +75,10 @@ export class TerminalSessionManager {
       convertEol: true,
       fontFamily: 'Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
       fontSize: 13,
-      lineHeight: 1.2,
-      letterSpacing: 0,
-      allowProposedApi: true,
-      scrollOnUserInput: false,
     });
 
     this.fitAddon = new FitAddon();
-    this.serializeAddon = new SerializeAddon();
     this.terminal.loadAddon(this.fitAddon);
-    this.terminal.loadAddon(this.serializeAddon);
-    try {
-      this.webglAddon = new WebglAddon();
-      this.webglAddon.onContextLoss?.(() => {
-        try {
-          this.webglAddon?.dispose();
-        } catch {}
-        this.webglAddon = null;
-      });
-      this.terminal.loadAddon(this.webglAddon);
-    } catch {
-      this.webglAddon = null;
-    }
 
     this.applyTheme(options.theme);
 
@@ -113,7 +91,7 @@ export class TerminalSessionManager {
       this.emitActivity();
       if (!this.disposed) {
         // Filter out focus reporting sequences (CSI I = focus in, CSI O = focus out)
-        // These are sent by xterm.js when focus changes but shouldn't go to the PTY
+        // These shouldn't be forwarded to the PTY
         const filtered = data.replace(/\x1b\[I|\x1b\[O/g, '');
         if (filtered) {
           // Track command execution when Enter is pressed
@@ -318,13 +296,47 @@ export class TerminalSessionManager {
    * Fit the terminal to its container while preserving the user's viewport
    * position (prevents jumps when sidebars resize and trigger fits).
    */
+  private isGhosttyTerminal(): boolean {
+    const term = this.terminal as any;
+    return typeof term?.viewportY === 'number' && typeof term?.getScrollbackLength === 'function';
+  }
+
+  private getViewportOffsetFromBottom(): number | null {
+    if (this.isGhosttyTerminal()) {
+      return (this.terminal as any).viewportY ?? 0;
+    }
+    const buffer = this.terminal.buffer?.active as any;
+    if (buffer && typeof buffer.baseY === 'number' && typeof buffer.viewportY === 'number') {
+      return buffer.baseY - buffer.viewportY;
+    }
+    return null;
+  }
+
+  private restoreViewportOffset(offsetFromBottom: number) {
+    if (this.isGhosttyTerminal()) {
+      try {
+        this.terminal.scrollToLine(offsetFromBottom);
+      } catch (error) {
+        log.warn('Terminal scroll restore failed after fit', { id: this.id, error });
+      }
+      return;
+    }
+
+    try {
+      const buffer = this.terminal.buffer?.active as any;
+      const targetBase = buffer?.baseY ?? null;
+      if (typeof targetBase === 'number') {
+        const targetLine = Math.max(0, targetBase - offsetFromBottom);
+        this.terminal.scrollToLine(targetLine);
+      }
+    } catch (error) {
+      log.warn('Terminal scroll restore failed after fit', { id: this.id, error });
+    }
+  }
+
   private fitPreservingViewport() {
     try {
-      const buffer = this.terminal.buffer?.active;
-      const offsetFromBottom =
-        buffer && typeof buffer.baseY === 'number' && typeof buffer.viewportY === 'number'
-          ? buffer.baseY - buffer.viewportY
-          : null;
+      const offsetFromBottom = this.getViewportOffsetFromBottom();
 
       this.fitAddon.fit();
 
@@ -333,16 +345,7 @@ export class TerminalSessionManager {
       if (offsetFromBottom !== null) {
         requestAnimationFrame(() => {
           if (this.disposed) return;
-          try {
-            const newBuffer = this.terminal.buffer?.active;
-            const targetBase = newBuffer?.baseY ?? null;
-            if (typeof targetBase === 'number') {
-              const targetLine = Math.max(0, targetBase - offsetFromBottom);
-              this.terminal.scrollToLine(targetLine);
-            }
-          } catch (error) {
-            log.warn('Terminal scroll restore failed after fit', { id: this.id, error });
-          }
+          this.restoreViewportOffset(offsetFromBottom);
         });
       }
     } catch (error) {
@@ -356,9 +359,8 @@ export class TerminalSessionManager {
    */
   private captureViewportPosition() {
     try {
-      const buffer = this.terminal.buffer?.active;
-      if (buffer && typeof buffer.baseY === 'number' && typeof buffer.viewportY === 'number') {
-        const offsetFromBottom = buffer.baseY - buffer.viewportY;
+      const offsetFromBottom = this.getViewportOffsetFromBottom();
+      if (typeof offsetFromBottom === 'number') {
         viewportPositions.set(this.id, offsetFromBottom);
       }
     } catch (error) {
@@ -375,11 +377,7 @@ export class TerminalSessionManager {
     try {
       const storedOffset = viewportPositions.get(this.id);
       if (typeof storedOffset === 'number') {
-        const buffer = this.terminal.buffer?.active;
-        if (buffer && typeof buffer.baseY === 'number') {
-          const targetLine = Math.max(0, buffer.baseY - storedOffset);
-          this.terminal.scrollToLine(targetLine);
-        }
+        this.restoreViewportOffset(storedOffset);
       }
     } catch (error) {
       log.warn('Failed to restore viewport position', { id: this.id, error });
@@ -400,19 +398,63 @@ export class TerminalSessionManager {
     }
   }
 
+  private buildProviderCommand(shell: string | undefined): {
+    command?: string;
+    skipResume?: boolean;
+  } {
+    if (!shell) return {};
+    const base = shell.split(/[/\\]/).pop() || shell;
+    const baseLower = base.toLowerCase();
+    const provider = PROVIDERS.find((p) => p.cli === baseLower);
+    if (!provider) return {};
+
+    const cliArgs: string[] = [];
+    const shouldResume = Boolean(provider.resumeFlag) && this.hasSnapshot;
+    if (provider.resumeFlag && shouldResume) {
+      cliArgs.push(...provider.resumeFlag.split(' ').filter(Boolean));
+    }
+    if (provider.defaultArgs?.length) {
+      cliArgs.push(...provider.defaultArgs);
+    }
+    if (this.options.autoApprove && provider.autoApproveFlag) {
+      cliArgs.push(provider.autoApproveFlag);
+    }
+    if (provider.initialPromptFlag !== undefined && this.options.initialPrompt?.trim()) {
+      if (provider.initialPromptFlag) {
+        cliArgs.push(provider.initialPromptFlag);
+      }
+      cliArgs.push(this.options.initialPrompt.trim());
+    }
+
+    const escapeArg = (arg: string) =>
+      /[\s'"\\$`\n\r\t]/.test(arg) ? `'${arg.replace(/'/g, "'\\''")}'` : arg;
+    const command =
+      cliArgs.length > 0
+        ? `${provider.cli || baseLower} ${cliArgs.map(escapeArg).join(' ')}`
+        : provider.cli || baseLower;
+
+    return {
+      command,
+      skipResume: Boolean(provider.resumeFlag) && !this.hasSnapshot,
+    };
+  }
+
   private connectPty() {
     const { taskId, cwd, shell, env, initialSize, autoApprove, initialPrompt } = this.options;
     const id = taskId;
+    const providerCommand = this.buildProviderCommand(shell);
     void window.electronAPI
       .ptyStart({
         id,
         cwd,
         shell,
+        command: providerCommand.command,
         env,
         cols: initialSize.cols,
         rows: initialSize.rows,
         autoApprove,
         initialPrompt,
+        skipResume: providerCommand.skipResume,
       })
       .then((result) => {
         if (result?.ok) {
@@ -447,12 +489,6 @@ export class TerminalSessionManager {
         this.terminal.writeln('[scrollback truncated to protect memory]');
       }
       this.terminal.write(chunk);
-      if (!this.firstFrameRendered) {
-        this.firstFrameRendered = true;
-        try {
-          this.terminal.refresh(0, this.terminal.rows - 1);
-        } catch {}
-      }
       // Auto-scroll to bottom when new data arrives
       // This ensures users always see the latest output, especially when the agent is waiting for input
       try {
@@ -486,18 +522,20 @@ export class TerminalSessionManager {
   private async restoreSnapshot(): Promise<void> {
     if (!window.electronAPI.ptyGetSnapshot) return;
 
-    // Skip snapshot restoration for providers with native resume capability
-    // The CLI will handle resuming the conversation, so we don't want duplicate history
-    if (this.isProviderWithResume(this.id)) {
-      log.debug('terminalSession:skippingSnapshotForResume', { id: this.id });
-      return;
-    }
-
     try {
       const response = await window.electronAPI.ptyGetSnapshot({ id: this.id });
-      if (!response?.ok || !response.snapshot?.data) return;
+      const snapshotPayload = response?.ok ? response.snapshot : null;
+      this.hasSnapshot = Boolean(snapshotPayload?.data);
+      if (!snapshotPayload?.data) return;
 
-      const snapshot = response.snapshot as TerminalSnapshotPayload & {
+      // Skip snapshot restoration for providers with native resume capability
+      // The CLI will handle resuming the conversation, so we don't want duplicate history
+      if (this.isProviderWithResume(this.id)) {
+        log.debug('terminalSession:skippingSnapshotForResume', { id: this.id });
+        return;
+      }
+
+      const snapshot = snapshotPayload as TerminalSnapshotPayload & {
         cols?: number;
         rows?: number;
       };
@@ -521,11 +559,30 @@ export class TerminalSessionManager {
       // Note: Viewport position restoration happens in attach() after terminal is opened
       // This ensures the terminal is fully initialized before we try to scroll
     } catch (error) {
+      this.hasSnapshot = false;
       log.warn('terminalSession:snapshotRestoreFailed', {
         id: this.id,
         error: (error as Error)?.message ?? String(error),
       });
     }
+  }
+
+  private serializeSnapshotData(): string {
+    const buffer = this.terminal.buffer?.normal ?? this.terminal.buffer?.active;
+    if (!buffer) return '';
+
+    const lineCount = buffer.length ?? 0;
+    let result = '';
+    for (let i = 0; i < lineCount; i += 1) {
+      const line = buffer.getLine(i);
+      if (!line) continue;
+      const text = line.translateToString(true);
+      result += text;
+      if (!line.isWrapped) {
+        result += '\n';
+      }
+    }
+    return result;
   }
 
   private captureSnapshot(reason: 'interval' | 'detach' | 'dispose'): Promise<void> {
@@ -539,7 +596,7 @@ export class TerminalSessionManager {
     const now = new Date().toISOString();
     const task = (async () => {
       try {
-        const data = this.serializeAddon.serialize();
+        const data = this.serializeSnapshotData();
         if (!data && reason === 'detach') return;
 
         const payload: TerminalSnapshotPayload = {
