@@ -1,4 +1,5 @@
 use crate::storage;
+use crate::runtime::run_blocking;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -592,643 +593,735 @@ fn query_project_settings(conn: &Connection, project_id: &str) -> Result<Value, 
 }
 
 #[tauri::command]
-pub fn db_get_projects(state: tauri::State<DbState>) -> Value {
-  if state.disabled {
-    return json!([]);
-  }
-  let guard = match lock_conn(&state) {
-    Ok(g) => g,
-    Err(_) => return json!([]),
-  };
-  let conn = match guard.as_ref() {
-    Some(conn) => conn,
-    None => return json!([]),
-  };
-
-  let mut stmt = match conn.prepare(
-    "SELECT id, name, path, git_remote, git_branch, base_ref, github_repository, github_connected, created_at, updated_at
-     FROM projects
-     ORDER BY updated_at DESC",
-  ) {
-    Ok(stmt) => stmt,
-    Err(_) => return json!([]),
-  };
-
-  let rows = stmt.query_map([], |row| {
-    let git_remote: Option<String> = row.get(3)?;
-    let git_branch: Option<String> = row.get(4)?;
-    let base_ref: Option<String> = row.get(5)?;
-    let github_repo: Option<String> = row.get(6)?;
-    let github_connected: Option<i64> = row.get(7)?;
-    let base_ref = compute_base_ref(
-      base_ref.as_deref(),
-      git_remote.as_deref(),
-      git_branch.as_deref(),
-    );
-
-    Ok(json!({
-      "id": row.get::<_, String>(0)?,
-      "name": row.get::<_, String>(1)?,
-      "path": row.get::<_, String>(2)?,
-      "gitInfo": {
-        "isGitRepo": git_remote.is_some() || git_branch.is_some(),
-        "remote": git_remote,
-        "branch": git_branch,
-        "baseRef": base_ref
-      },
-      "githubInfo": github_repo.as_ref().map(|repo| json!({
-        "repository": repo,
-        "connected": github_connected.unwrap_or(0) != 0
-      })),
-      "createdAt": row.get::<_, String>(8)?,
-      "updatedAt": row.get::<_, String>(9)?
-    }))
-  });
-
-  match rows {
-    Ok(iter) => {
-      let mut projects: Vec<Value> = Vec::new();
-      for item in iter.flatten() {
-        projects.push(item);
-      }
-      Value::Array(projects)
+pub async fn db_get_projects(app: tauri::AppHandle) -> Value {
+  run_blocking(json!([]), move || {
+    let state: tauri::State<DbState> = app.state();
+    if state.disabled {
+      return json!([]);
     }
-    Err(_) => json!([]),
-  }
-}
+    let guard = match lock_conn(&state) {
+      Ok(g) => g,
+      Err(_) => return json!([]),
+    };
+    let conn = match guard.as_ref() {
+      Some(conn) => conn,
+      None => return json!([]),
+    };
 
-#[tauri::command]
-pub fn db_save_project(state: tauri::State<DbState>, project: Value) -> Value {
-  if state.disabled {
-    return json!({ "success": true });
-  }
-  let input: ProjectInput = match serde_json::from_value(project) {
-    Ok(input) => input,
-    Err(_) => return json!({ "success": false, "error": "Invalid project" }),
-  };
+    let mut stmt = match conn.prepare(
+      "SELECT id, name, path, git_remote, git_branch, base_ref, github_repository, github_connected, created_at, updated_at
+       FROM projects
+       ORDER BY updated_at DESC",
+    ) {
+      Ok(stmt) => stmt,
+      Err(_) => return json!([]),
+    };
 
-  let guard = match lock_conn(&state) {
-    Ok(g) => g,
-    Err(err) => return json!({ "success": false, "error": err }),
-  };
-  let conn = match guard.as_ref() {
-    Some(conn) => conn,
-    None => return json!({ "success": false, "error": "DB not initialized" }),
-  };
+    let rows = stmt.query_map([], |row| {
+      let git_remote: Option<String> = row.get(3)?;
+      let git_branch: Option<String> = row.get(4)?;
+      let base_ref: Option<String> = row.get(5)?;
+      let github_repo: Option<String> = row.get(6)?;
+      let github_connected: Option<i64> = row.get(7)?;
+      let base_ref = compute_base_ref(
+        base_ref.as_deref(),
+        git_remote.as_deref(),
+        git_branch.as_deref(),
+      );
 
-  let base_ref = compute_base_ref(
-    input.git_info.base_ref.as_deref(),
-    input.git_info.remote.as_deref(),
-    input.git_info.branch.as_deref(),
-  );
-  let github_repo = input.github_info.as_ref().map(|g| g.repository.clone());
-  let github_connected = input.github_info.as_ref().map(|g| if g.connected { 1 } else { 0 });
+      Ok(json!({
+        "id": row.get::<_, String>(0)?,
+        "name": row.get::<_, String>(1)?,
+        "path": row.get::<_, String>(2)?,
+        "gitInfo": {
+          "isGitRepo": git_remote.is_some() || git_branch.is_some(),
+          "remote": git_remote,
+          "branch": git_branch,
+          "baseRef": base_ref
+        },
+        "githubInfo": github_repo.as_ref().map(|repo| json!({
+          "repository": repo,
+          "connected": github_connected.unwrap_or(0) != 0
+        })),
+        "createdAt": row.get::<_, String>(8)?,
+        "updatedAt": row.get::<_, String>(9)?
+      }))
+    });
 
-  let result = conn.execute(
-    "INSERT INTO projects (id, name, path, git_remote, git_branch, base_ref, github_repository, github_connected, updated_at)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, CURRENT_TIMESTAMP)
-     ON CONFLICT(path) DO UPDATE SET
-       name=excluded.name,
-       git_remote=excluded.git_remote,
-       git_branch=excluded.git_branch,
-       base_ref=excluded.base_ref,
-       github_repository=excluded.github_repository,
-       github_connected=excluded.github_connected,
-       updated_at=CURRENT_TIMESTAMP",
-    params![
-      input.id,
-      input.name,
-      input.path,
-      input.git_info.remote,
-      input.git_info.branch,
-      base_ref,
-      github_repo,
-      github_connected.unwrap_or(0)
-    ],
-  );
-
-  match result {
-    Ok(_) => json!({ "success": true }),
-    Err(err) => json!({ "success": false, "error": err.to_string() }),
-  }
-}
-
-#[tauri::command]
-pub fn db_get_tasks(state: tauri::State<DbState>, project_id: Option<String>) -> Value {
-  if state.disabled {
-    return json!([]);
-  }
-  let guard = match lock_conn(&state) {
-    Ok(g) => g,
-    Err(_) => return json!([]),
-  };
-  let conn = match guard.as_ref() {
-    Some(conn) => conn,
-    None => return json!([]),
-  };
-
-  let sql = "SELECT id, project_id, name, branch, path, status, agent_id, metadata, created_at, updated_at
-       FROM tasks
-       WHERE (?1 IS NULL OR project_id = ?1)
-       ORDER BY updated_at DESC";
-
-  let mut stmt = match conn.prepare(sql) {
-    Ok(stmt) => stmt,
-    Err(_) => return json!([]),
-  };
-
-  let rows = stmt.query_map(params![project_id], |row| {
-    let metadata: Option<String> = row.get(7)?;
-    Ok(json!({
-      "id": row.get::<_, String>(0)?,
-      "projectId": row.get::<_, String>(1)?,
-      "name": row.get::<_, String>(2)?,
-      "branch": row.get::<_, String>(3)?,
-      "path": row.get::<_, String>(4)?,
-      "status": row.get::<_, String>(5)?,
-      "agentId": row.get::<_, Option<String>>(6)?,
-      "metadata": parse_metadata(metadata),
-      "createdAt": row.get::<_, String>(8)?,
-      "updatedAt": row.get::<_, String>(9)?
-    }))
-  });
-
-  match rows {
-    Ok(iter) => {
-      let mut tasks: Vec<Value> = Vec::new();
-      for item in iter.flatten() {
-        tasks.push(item);
+    match rows {
+      Ok(iter) => {
+        let mut projects: Vec<Value> = Vec::new();
+        for item in iter.flatten() {
+          projects.push(item);
+        }
+        Value::Array(projects)
       }
-      Value::Array(tasks)
+      Err(_) => json!([]),
     }
-    Err(_) => json!([]),
-  }
+  })
+  .await
 }
 
 #[tauri::command]
-pub fn db_save_task(state: tauri::State<DbState>, task: Value) -> Value {
-  if state.disabled {
-    return json!({ "success": true });
-  }
-  let input: TaskInput = match serde_json::from_value(task) {
-    Ok(input) => input,
-    Err(_) => return json!({ "success": false, "error": "Invalid task" }),
-  };
-
-  let guard = match lock_conn(&state) {
-    Ok(g) => g,
-    Err(err) => return json!({ "success": false, "error": err }),
-  };
-  let conn = match guard.as_ref() {
-    Some(conn) => conn,
-    None => return json!({ "success": false, "error": "DB not initialized" }),
-  };
-
-  let metadata_value = metadata_to_string(input.metadata);
-
-  let result = conn.execute(
-    "INSERT INTO tasks (id, project_id, name, branch, path, status, agent_id, metadata, updated_at)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, CURRENT_TIMESTAMP)
-     ON CONFLICT(id) DO UPDATE SET
-       project_id=excluded.project_id,
-       name=excluded.name,
-       branch=excluded.branch,
-       path=excluded.path,
-       status=excluded.status,
-       agent_id=excluded.agent_id,
-       metadata=excluded.metadata,
-       updated_at=CURRENT_TIMESTAMP",
-    params![
-      input.id,
-      input.project_id,
-      input.name,
-      input.branch,
-      input.path,
-      input.status,
-      input.agent_id,
-      metadata_value
-    ],
-  );
-
-  match result {
-    Ok(_) => json!({ "success": true }),
-    Err(err) => json!({ "success": false, "error": err.to_string() }),
-  }
-}
-
-#[tauri::command]
-pub fn db_delete_project(state: tauri::State<DbState>, project_id: String) -> Value {
-  if state.disabled {
-    return json!({ "success": true });
-  }
-  let guard = match lock_conn(&state) {
-    Ok(g) => g,
-    Err(err) => return json!({ "success": false, "error": err }),
-  };
-  let conn = match guard.as_ref() {
-    Some(conn) => conn,
-    None => return json!({ "success": false, "error": "DB not initialized" }),
-  };
-
-  match conn.execute("DELETE FROM projects WHERE id = ?1", params![project_id]) {
-    Ok(_) => json!({ "success": true }),
-    Err(err) => json!({ "success": false, "error": err.to_string() }),
-  }
-}
-
-#[tauri::command]
-pub fn db_delete_task(state: tauri::State<DbState>, task_id: String) -> Value {
-  if state.disabled {
-    return json!({ "success": true });
-  }
-  let guard = match lock_conn(&state) {
-    Ok(g) => g,
-    Err(err) => return json!({ "success": false, "error": err }),
-  };
-  let conn = match guard.as_ref() {
-    Some(conn) => conn,
-    None => return json!({ "success": false, "error": "DB not initialized" }),
-  };
-
-  match conn.execute("DELETE FROM tasks WHERE id = ?1", params![task_id]) {
-    Ok(_) => json!({ "success": true }),
-    Err(err) => json!({ "success": false, "error": err.to_string() }),
-  }
-}
-
-#[tauri::command]
-pub fn db_save_conversation(state: tauri::State<DbState>, conversation: Value) -> Value {
-  if state.disabled {
-    return json!({ "success": true });
-  }
-  let input: ConversationInput = match serde_json::from_value(conversation) {
-    Ok(input) => input,
-    Err(_) => return json!({ "success": false, "error": "Invalid conversation" }),
-  };
-
-  let guard = match lock_conn(&state) {
-    Ok(g) => g,
-    Err(err) => return json!({ "success": false, "error": err }),
-  };
-  let conn = match guard.as_ref() {
-    Some(conn) => conn,
-    None => return json!({ "success": false, "error": "DB not initialized" }),
-  };
-
-  let result = conn.execute(
-    "INSERT INTO conversations (id, task_id, title, updated_at)
-     VALUES (?1, ?2, ?3, CURRENT_TIMESTAMP)
-     ON CONFLICT(id) DO UPDATE SET
-       title=excluded.title,
-       updated_at=CURRENT_TIMESTAMP",
-    params![input.id, input.task_id, input.title],
-  );
-
-  match result {
-    Ok(_) => json!({ "success": true }),
-    Err(err) => json!({ "success": false, "error": err.to_string() }),
-  }
-}
-
-#[tauri::command]
-pub fn db_get_conversations(state: tauri::State<DbState>, task_id: String) -> Value {
-  if state.disabled {
-    return json!({ "success": true, "conversations": [] });
-  }
-  let guard = match lock_conn(&state) {
-    Ok(g) => g,
-    Err(err) => return json!({ "success": false, "error": err }),
-  };
-  let conn = match guard.as_ref() {
-    Some(conn) => conn,
-    None => return json!({ "success": true, "conversations": [] }),
-  };
-
-  let mut stmt = match conn.prepare(
-    "SELECT id, task_id, title, created_at, updated_at
-     FROM conversations
-     WHERE task_id = ?1
-     ORDER BY updated_at DESC",
-  ) {
-    Ok(stmt) => stmt,
-    Err(err) => return json!({ "success": false, "error": err.to_string() }),
-  };
-
-  let rows = stmt.query_map(params![task_id], |row| {
-    Ok(json!({
-      "id": row.get::<_, String>(0)?,
-      "taskId": row.get::<_, String>(1)?,
-      "title": row.get::<_, String>(2)?,
-      "createdAt": row.get::<_, String>(3)?,
-      "updatedAt": row.get::<_, String>(4)?
-    }))
-  });
-
-  match rows {
-    Ok(iter) => {
-      let mut conversations: Vec<Value> = Vec::new();
-      for item in iter.flatten() {
-        conversations.push(item);
+pub async fn db_save_project(app: tauri::AppHandle, project: Value) -> Value {
+  run_blocking(
+    json!({ "success": false, "error": "Task cancelled" }),
+    move || {
+      let state: tauri::State<DbState> = app.state();
+      if state.disabled {
+        return json!({ "success": true });
       }
-      json!({ "success": true, "conversations": conversations })
-    }
-    Err(err) => json!({ "success": false, "error": err.to_string() }),
-  }
+      let input: ProjectInput = match serde_json::from_value(project) {
+        Ok(input) => input,
+        Err(_) => return json!({ "success": false, "error": "Invalid project" }),
+      };
+
+      let guard = match lock_conn(&state) {
+        Ok(g) => g,
+        Err(err) => return json!({ "success": false, "error": err }),
+      };
+      let conn = match guard.as_ref() {
+        Some(conn) => conn,
+        None => return json!({ "success": false, "error": "DB not initialized" }),
+      };
+
+      let base_ref = compute_base_ref(
+        input.git_info.base_ref.as_deref(),
+        input.git_info.remote.as_deref(),
+        input.git_info.branch.as_deref(),
+      );
+      let github_repo = input.github_info.as_ref().map(|g| g.repository.clone());
+      let github_connected = input.github_info.as_ref().map(|g| if g.connected { 1 } else { 0 });
+
+      let result = conn.execute(
+        "INSERT INTO projects (id, name, path, git_remote, git_branch, base_ref, github_repository, github_connected, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, CURRENT_TIMESTAMP)
+         ON CONFLICT(path) DO UPDATE SET
+           name=excluded.name,
+           git_remote=excluded.git_remote,
+           git_branch=excluded.git_branch,
+           base_ref=excluded.base_ref,
+           github_repository=excluded.github_repository,
+           github_connected=excluded.github_connected,
+           updated_at=CURRENT_TIMESTAMP",
+        params![
+          input.id,
+          input.name,
+          input.path,
+          input.git_info.remote,
+          input.git_info.branch,
+          base_ref,
+          github_repo,
+          github_connected.unwrap_or(0)
+        ],
+      );
+
+      match result {
+        Ok(_) => json!({ "success": true }),
+        Err(err) => json!({ "success": false, "error": err.to_string() }),
+      }
+    },
+  )
+  .await
 }
 
 #[tauri::command]
-pub fn db_get_or_create_default_conversation(
-  state: tauri::State<DbState>,
+pub async fn db_get_tasks(app: tauri::AppHandle, project_id: Option<String>) -> Value {
+  run_blocking(json!([]), move || {
+    let state: tauri::State<DbState> = app.state();
+    if state.disabled {
+      return json!([]);
+    }
+    let guard = match lock_conn(&state) {
+      Ok(g) => g,
+      Err(_) => return json!([]),
+    };
+    let conn = match guard.as_ref() {
+      Some(conn) => conn,
+      None => return json!([]),
+    };
+
+    let sql = "SELECT id, project_id, name, branch, path, status, agent_id, metadata, created_at, updated_at
+         FROM tasks
+         WHERE (?1 IS NULL OR project_id = ?1)
+         ORDER BY updated_at DESC";
+
+    let mut stmt = match conn.prepare(sql) {
+      Ok(stmt) => stmt,
+      Err(_) => return json!([]),
+    };
+
+    let rows = stmt.query_map(params![project_id], |row| {
+      let metadata: Option<String> = row.get(7)?;
+      Ok(json!({
+        "id": row.get::<_, String>(0)?,
+        "projectId": row.get::<_, String>(1)?,
+        "name": row.get::<_, String>(2)?,
+        "branch": row.get::<_, String>(3)?,
+        "path": row.get::<_, String>(4)?,
+        "status": row.get::<_, String>(5)?,
+        "agentId": row.get::<_, Option<String>>(6)?,
+        "metadata": parse_metadata(metadata),
+        "createdAt": row.get::<_, String>(8)?,
+        "updatedAt": row.get::<_, String>(9)?
+      }))
+    });
+
+    match rows {
+      Ok(iter) => {
+        let mut tasks: Vec<Value> = Vec::new();
+        for item in iter.flatten() {
+          tasks.push(item);
+        }
+        Value::Array(tasks)
+      }
+      Err(_) => json!([]),
+    }
+  })
+  .await
+}
+
+#[tauri::command]
+pub async fn db_save_task(app: tauri::AppHandle, task: Value) -> Value {
+  run_blocking(
+    json!({ "success": false, "error": "Task cancelled" }),
+    move || {
+      let state: tauri::State<DbState> = app.state();
+      if state.disabled {
+        return json!({ "success": true });
+      }
+      let input: TaskInput = match serde_json::from_value(task) {
+        Ok(input) => input,
+        Err(_) => return json!({ "success": false, "error": "Invalid task" }),
+      };
+
+      let guard = match lock_conn(&state) {
+        Ok(g) => g,
+        Err(err) => return json!({ "success": false, "error": err }),
+      };
+      let conn = match guard.as_ref() {
+        Some(conn) => conn,
+        None => return json!({ "success": false, "error": "DB not initialized" }),
+      };
+
+      let metadata_value = metadata_to_string(input.metadata);
+
+      let result = conn.execute(
+        "INSERT INTO tasks (id, project_id, name, branch, path, status, agent_id, metadata, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, CURRENT_TIMESTAMP)
+         ON CONFLICT(id) DO UPDATE SET
+           project_id=excluded.project_id,
+           name=excluded.name,
+           branch=excluded.branch,
+           path=excluded.path,
+           status=excluded.status,
+           agent_id=excluded.agent_id,
+           metadata=excluded.metadata,
+           updated_at=CURRENT_TIMESTAMP",
+        params![
+          input.id,
+          input.project_id,
+          input.name,
+          input.branch,
+          input.path,
+          input.status,
+          input.agent_id,
+          metadata_value
+        ],
+      );
+
+      match result {
+        Ok(_) => json!({ "success": true }),
+        Err(err) => json!({ "success": false, "error": err.to_string() }),
+      }
+    },
+  )
+  .await
+}
+
+#[tauri::command]
+pub async fn db_delete_project(app: tauri::AppHandle, project_id: String) -> Value {
+  run_blocking(
+    json!({ "success": false, "error": "Task cancelled" }),
+    move || {
+      let state: tauri::State<DbState> = app.state();
+      if state.disabled {
+        return json!({ "success": true });
+      }
+      let guard = match lock_conn(&state) {
+        Ok(g) => g,
+        Err(err) => return json!({ "success": false, "error": err }),
+      };
+      let conn = match guard.as_ref() {
+        Some(conn) => conn,
+        None => return json!({ "success": false, "error": "DB not initialized" }),
+      };
+
+      match conn.execute("DELETE FROM projects WHERE id = ?1", params![project_id]) {
+        Ok(_) => json!({ "success": true }),
+        Err(err) => json!({ "success": false, "error": err.to_string() }),
+      }
+    },
+  )
+  .await
+}
+
+#[tauri::command]
+pub async fn db_delete_task(app: tauri::AppHandle, task_id: String) -> Value {
+  run_blocking(
+    json!({ "success": false, "error": "Task cancelled" }),
+    move || {
+      let state: tauri::State<DbState> = app.state();
+      if state.disabled {
+        return json!({ "success": true });
+      }
+      let guard = match lock_conn(&state) {
+        Ok(g) => g,
+        Err(err) => return json!({ "success": false, "error": err }),
+      };
+      let conn = match guard.as_ref() {
+        Some(conn) => conn,
+        None => return json!({ "success": false, "error": "DB not initialized" }),
+      };
+
+      match conn.execute("DELETE FROM tasks WHERE id = ?1", params![task_id]) {
+        Ok(_) => json!({ "success": true }),
+        Err(err) => json!({ "success": false, "error": err.to_string() }),
+      }
+    },
+  )
+  .await
+}
+
+#[tauri::command]
+pub async fn db_save_conversation(app: tauri::AppHandle, conversation: Value) -> Value {
+  run_blocking(
+    json!({ "success": false, "error": "Task cancelled" }),
+    move || {
+      let state: tauri::State<DbState> = app.state();
+      if state.disabled {
+        return json!({ "success": true });
+      }
+      let input: ConversationInput = match serde_json::from_value(conversation) {
+        Ok(input) => input,
+        Err(_) => return json!({ "success": false, "error": "Invalid conversation" }),
+      };
+
+      let guard = match lock_conn(&state) {
+        Ok(g) => g,
+        Err(err) => return json!({ "success": false, "error": err }),
+      };
+      let conn = match guard.as_ref() {
+        Some(conn) => conn,
+        None => return json!({ "success": false, "error": "DB not initialized" }),
+      };
+
+      let result = conn.execute(
+        "INSERT INTO conversations (id, task_id, title, updated_at)
+         VALUES (?1, ?2, ?3, CURRENT_TIMESTAMP)
+         ON CONFLICT(id) DO UPDATE SET
+           title=excluded.title,
+           updated_at=CURRENT_TIMESTAMP",
+        params![input.id, input.task_id, input.title],
+      );
+
+      match result {
+        Ok(_) => json!({ "success": true }),
+        Err(err) => json!({ "success": false, "error": err.to_string() }),
+      }
+    },
+  )
+  .await
+}
+
+#[tauri::command]
+pub async fn db_get_conversations(app: tauri::AppHandle, task_id: String) -> Value {
+  run_blocking(
+    json!({ "success": false, "error": "Task cancelled" }),
+    move || {
+      let state: tauri::State<DbState> = app.state();
+      if state.disabled {
+        return json!({ "success": true, "conversations": [] });
+      }
+      let guard = match lock_conn(&state) {
+        Ok(g) => g,
+        Err(err) => return json!({ "success": false, "error": err }),
+      };
+      let conn = match guard.as_ref() {
+        Some(conn) => conn,
+        None => return json!({ "success": true, "conversations": [] }),
+      };
+
+      let mut stmt = match conn.prepare(
+        "SELECT id, task_id, title, created_at, updated_at
+         FROM conversations
+         WHERE task_id = ?1
+         ORDER BY updated_at DESC",
+      ) {
+        Ok(stmt) => stmt,
+        Err(err) => return json!({ "success": false, "error": err.to_string() }),
+      };
+
+      let rows = stmt.query_map(params![task_id], |row| {
+        Ok(json!({
+          "id": row.get::<_, String>(0)?,
+          "taskId": row.get::<_, String>(1)?,
+          "title": row.get::<_, String>(2)?,
+          "createdAt": row.get::<_, String>(3)?,
+          "updatedAt": row.get::<_, String>(4)?
+        }))
+      });
+
+      match rows {
+        Ok(iter) => {
+          let mut conversations: Vec<Value> = Vec::new();
+          for item in iter.flatten() {
+            conversations.push(item);
+          }
+          json!({ "success": true, "conversations": conversations })
+        }
+        Err(err) => json!({ "success": false, "error": err.to_string() }),
+      }
+    },
+  )
+  .await
+}
+
+#[tauri::command]
+pub async fn db_get_or_create_default_conversation(
+  app: tauri::AppHandle,
   task_id: String,
 ) -> Value {
-  if state.disabled {
-    let now = chrono::Utc::now().to_rfc3339();
-    return json!({
-      "success": true,
-      "conversation": {
-        "id": format!("conv-{}-default", task_id),
-        "taskId": task_id,
-        "title": "Default Conversation",
-        "createdAt": now,
-        "updatedAt": now
+  run_blocking(
+    json!({ "success": false, "error": "Task cancelled" }),
+    move || {
+      let state: tauri::State<DbState> = app.state();
+      if state.disabled {
+        let now = chrono::Utc::now().to_rfc3339();
+        return json!({
+          "success": true,
+          "conversation": {
+            "id": format!("conv-{}-default", task_id),
+            "taskId": task_id,
+            "title": "Default Conversation",
+            "createdAt": now,
+            "updatedAt": now
+          }
+        });
       }
-    });
-  }
-  let guard = match lock_conn(&state) {
-    Ok(g) => g,
-    Err(err) => return json!({ "success": false, "error": err }),
-  };
-  let conn = match guard.as_ref() {
-    Some(conn) => conn,
-    None => return json!({ "success": false, "error": "DB not initialized" }),
-  };
+      let guard = match lock_conn(&state) {
+        Ok(g) => g,
+        Err(err) => return json!({ "success": false, "error": err }),
+      };
+      let conn = match guard.as_ref() {
+        Some(conn) => conn,
+        None => return json!({ "success": false, "error": "DB not initialized" }),
+      };
 
-  let existing: Option<Value> = conn
-    .query_row(
-      "SELECT id, task_id, title, created_at, updated_at
-       FROM conversations
-       WHERE task_id = ?1
-       ORDER BY created_at ASC
-       LIMIT 1",
-      params![task_id],
-      |row| {
+      let existing: Option<Value> = conn
+        .query_row(
+          "SELECT id, task_id, title, created_at, updated_at
+           FROM conversations
+           WHERE task_id = ?1
+           ORDER BY created_at ASC
+           LIMIT 1",
+          params![task_id],
+          |row| {
+            Ok(json!({
+              "id": row.get::<_, String>(0)?,
+              "taskId": row.get::<_, String>(1)?,
+              "title": row.get::<_, String>(2)?,
+              "createdAt": row.get::<_, String>(3)?,
+              "updatedAt": row.get::<_, String>(4)?
+            }))
+          },
+        )
+        .optional()
+        .map_err(|err| err.to_string())
+        .ok()
+        .flatten();
+
+      if let Some(conversation) = existing {
+        return json!({ "success": true, "conversation": conversation });
+      }
+
+      let conversation_id = format!("conv-{}-{}", task_id, now_millis());
+      if let Err(err) = conn.execute(
+        "INSERT INTO conversations (id, task_id, title, updated_at)
+         VALUES (?1, ?2, ?3, CURRENT_TIMESTAMP)",
+        params![conversation_id, task_id, "Default Conversation"],
+      ) {
+        return json!({ "success": false, "error": err.to_string() });
+      }
+
+      let created: Option<Value> = conn
+        .query_row(
+          "SELECT id, task_id, title, created_at, updated_at
+           FROM conversations
+           WHERE id = ?1
+           LIMIT 1",
+          params![conversation_id],
+          |row| {
+            Ok(json!({
+              "id": row.get::<_, String>(0)?,
+              "taskId": row.get::<_, String>(1)?,
+              "title": row.get::<_, String>(2)?,
+              "createdAt": row.get::<_, String>(3)?,
+              "updatedAt": row.get::<_, String>(4)?
+            }))
+          },
+        )
+        .optional()
+        .map_err(|err| err.to_string())
+        .ok()
+        .flatten();
+
+      if let Some(conversation) = created {
+        json!({ "success": true, "conversation": conversation })
+      } else {
+        let now = chrono::Utc::now().to_rfc3339();
+        json!({
+          "success": true,
+          "conversation": {
+            "id": conversation_id,
+            "taskId": task_id,
+            "title": "Default Conversation",
+            "createdAt": now,
+            "updatedAt": now
+          }
+        })
+      }
+    },
+  )
+  .await
+}
+
+#[tauri::command]
+pub async fn db_save_message(app: tauri::AppHandle, message: Value) -> Value {
+  run_blocking(
+    json!({ "success": false, "error": "Task cancelled" }),
+    move || {
+      let state: tauri::State<DbState> = app.state();
+      if state.disabled {
+        return json!({ "success": true });
+      }
+      let input: MessageInput = match serde_json::from_value(message) {
+        Ok(input) => input,
+        Err(_) => return json!({ "success": false, "error": "Invalid message" }),
+      };
+
+      let mut guard = match lock_conn(&state) {
+        Ok(g) => g,
+        Err(err) => return json!({ "success": false, "error": err }),
+      };
+      let conn = match guard.as_mut() {
+        Some(conn) => conn,
+        None => return json!({ "success": false, "error": "DB not initialized" }),
+      };
+
+      let meta = metadata_to_string(input.metadata);
+      let tx = match conn.transaction() {
+        Ok(tx) => tx,
+        Err(err) => return json!({ "success": false, "error": err.to_string() }),
+      };
+
+      if let Err(err) = tx.execute(
+        "INSERT INTO messages (id, conversation_id, content, sender, metadata, timestamp)
+         VALUES (?1, ?2, ?3, ?4, ?5, CURRENT_TIMESTAMP)
+         ON CONFLICT(id) DO NOTHING",
+        params![
+          input.id,
+          input.conversation_id,
+          input.content,
+          input.sender,
+          meta
+        ],
+      ) {
+        return json!({ "success": false, "error": err.to_string() });
+      }
+
+      if let Err(err) = tx.execute(
+        "UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = ?1",
+        params![input.conversation_id],
+      ) {
+        return json!({ "success": false, "error": err.to_string() });
+      }
+
+      if let Err(err) = tx.commit() {
+        return json!({ "success": false, "error": err.to_string() });
+      }
+
+      json!({ "success": true })
+    },
+  )
+  .await
+}
+
+#[tauri::command]
+pub async fn db_get_messages(app: tauri::AppHandle, conversation_id: String) -> Value {
+  run_blocking(
+    json!({ "success": false, "error": "Task cancelled" }),
+    move || {
+      let state: tauri::State<DbState> = app.state();
+      if state.disabled {
+        return json!({ "success": true, "messages": [] });
+      }
+      let guard = match lock_conn(&state) {
+        Ok(g) => g,
+        Err(err) => return json!({ "success": false, "error": err }),
+      };
+      let conn = match guard.as_ref() {
+        Some(conn) => conn,
+        None => return json!({ "success": true, "messages": [] }),
+      };
+
+      let mut stmt = match conn.prepare(
+        "SELECT id, conversation_id, content, sender, timestamp, metadata
+         FROM messages
+         WHERE conversation_id = ?1
+         ORDER BY timestamp ASC",
+      ) {
+        Ok(stmt) => stmt,
+        Err(err) => return json!({ "success": false, "error": err.to_string() }),
+      };
+
+      let rows = stmt.query_map(params![conversation_id], |row| {
+        let metadata: Option<String> = row.get(5)?;
         Ok(json!({
           "id": row.get::<_, String>(0)?,
-          "taskId": row.get::<_, String>(1)?,
-          "title": row.get::<_, String>(2)?,
-          "createdAt": row.get::<_, String>(3)?,
-          "updatedAt": row.get::<_, String>(4)?
+          "conversationId": row.get::<_, String>(1)?,
+          "content": row.get::<_, String>(2)?,
+          "sender": row.get::<_, String>(3)?,
+          "timestamp": row.get::<_, String>(4)?,
+          "metadata": parse_metadata(metadata)
         }))
-      },
-    )
-    .optional()
-    .map_err(|err| err.to_string())
-    .ok()
-    .flatten();
+      });
 
-  if let Some(conversation) = existing {
-    return json!({ "success": true, "conversation": conversation });
-  }
-
-  let conversation_id = format!("conv-{}-{}", task_id, now_millis());
-  if let Err(err) = conn.execute(
-    "INSERT INTO conversations (id, task_id, title, updated_at)
-     VALUES (?1, ?2, ?3, CURRENT_TIMESTAMP)",
-    params![conversation_id, task_id, "Default Conversation"],
-  ) {
-    return json!({ "success": false, "error": err.to_string() });
-  }
-
-  let created: Option<Value> = conn
-    .query_row(
-      "SELECT id, task_id, title, created_at, updated_at
-       FROM conversations
-       WHERE id = ?1
-       LIMIT 1",
-      params![conversation_id],
-      |row| {
-        Ok(json!({
-          "id": row.get::<_, String>(0)?,
-          "taskId": row.get::<_, String>(1)?,
-          "title": row.get::<_, String>(2)?,
-          "createdAt": row.get::<_, String>(3)?,
-          "updatedAt": row.get::<_, String>(4)?
-        }))
-      },
-    )
-    .optional()
-    .map_err(|err| err.to_string())
-    .ok()
-    .flatten();
-
-  if let Some(conversation) = created {
-    json!({ "success": true, "conversation": conversation })
-  } else {
-    let now = chrono::Utc::now().to_rfc3339();
-    json!({
-      "success": true,
-      "conversation": {
-        "id": conversation_id,
-        "taskId": task_id,
-        "title": "Default Conversation",
-        "createdAt": now,
-        "updatedAt": now
+      match rows {
+        Ok(iter) => {
+          let mut messages: Vec<Value> = Vec::new();
+          for item in iter.flatten() {
+            messages.push(item);
+          }
+          json!({ "success": true, "messages": messages })
+        }
+        Err(err) => json!({ "success": false, "error": err.to_string() }),
       }
-    })
-  }
+    },
+  )
+  .await
 }
 
 #[tauri::command]
-pub fn db_save_message(state: tauri::State<DbState>, message: Value) -> Value {
-  if state.disabled {
-    return json!({ "success": true });
-  }
-  let input: MessageInput = match serde_json::from_value(message) {
-    Ok(input) => input,
-    Err(_) => return json!({ "success": false, "error": "Invalid message" }),
-  };
-
-  let mut guard = match lock_conn(&state) {
-    Ok(g) => g,
-    Err(err) => return json!({ "success": false, "error": err }),
-  };
-  let conn = match guard.as_mut() {
-    Some(conn) => conn,
-    None => return json!({ "success": false, "error": "DB not initialized" }),
-  };
-
-  let meta = metadata_to_string(input.metadata);
-  let tx = match conn.transaction() {
-    Ok(tx) => tx,
-    Err(err) => return json!({ "success": false, "error": err.to_string() }),
-  };
-
-  if let Err(err) = tx.execute(
-    "INSERT INTO messages (id, conversation_id, content, sender, metadata, timestamp)
-     VALUES (?1, ?2, ?3, ?4, ?5, CURRENT_TIMESTAMP)
-     ON CONFLICT(id) DO NOTHING",
-    params![
-      input.id,
-      input.conversation_id,
-      input.content,
-      input.sender,
-      meta
-    ],
-  ) {
-    return json!({ "success": false, "error": err.to_string() });
-  }
-
-  if let Err(err) = tx.execute(
-    "UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = ?1",
-    params![input.conversation_id],
-  ) {
-    return json!({ "success": false, "error": err.to_string() });
-  }
-
-  if let Err(err) = tx.commit() {
-    return json!({ "success": false, "error": err.to_string() });
-  }
-
-  json!({ "success": true })
-}
-
-#[tauri::command]
-pub fn db_get_messages(state: tauri::State<DbState>, conversation_id: String) -> Value {
-  if state.disabled {
-    return json!({ "success": true, "messages": [] });
-  }
-  let guard = match lock_conn(&state) {
-    Ok(g) => g,
-    Err(err) => return json!({ "success": false, "error": err }),
-  };
-  let conn = match guard.as_ref() {
-    Some(conn) => conn,
-    None => return json!({ "success": true, "messages": [] }),
-  };
-
-  let mut stmt = match conn.prepare(
-    "SELECT id, conversation_id, content, sender, timestamp, metadata
-     FROM messages
-     WHERE conversation_id = ?1
-     ORDER BY timestamp ASC",
-  ) {
-    Ok(stmt) => stmt,
-    Err(err) => return json!({ "success": false, "error": err.to_string() }),
-  };
-
-  let rows = stmt.query_map(params![conversation_id], |row| {
-    let metadata: Option<String> = row.get(5)?;
-    Ok(json!({
-      "id": row.get::<_, String>(0)?,
-      "conversationId": row.get::<_, String>(1)?,
-      "content": row.get::<_, String>(2)?,
-      "sender": row.get::<_, String>(3)?,
-      "timestamp": row.get::<_, String>(4)?,
-      "metadata": parse_metadata(metadata)
-    }))
-  });
-
-  match rows {
-    Ok(iter) => {
-      let mut messages: Vec<Value> = Vec::new();
-      for item in iter.flatten() {
-        messages.push(item);
+pub async fn db_delete_conversation(app: tauri::AppHandle, conversation_id: String) -> Value {
+  run_blocking(
+    json!({ "success": false, "error": "Task cancelled" }),
+    move || {
+      let state: tauri::State<DbState> = app.state();
+      if state.disabled {
+        return json!({ "success": true });
       }
-      json!({ "success": true, "messages": messages })
-    }
-    Err(err) => json!({ "success": false, "error": err.to_string() }),
-  }
+      let guard = match lock_conn(&state) {
+        Ok(g) => g,
+        Err(err) => return json!({ "success": false, "error": err }),
+      };
+      let conn = match guard.as_ref() {
+        Some(conn) => conn,
+        None => return json!({ "success": false, "error": "DB not initialized" }),
+      };
+
+      match conn.execute("DELETE FROM conversations WHERE id = ?1", params![conversation_id]) {
+        Ok(_) => json!({ "success": true }),
+        Err(err) => json!({ "success": false, "error": err.to_string() }),
+      }
+    },
+  )
+  .await
 }
 
 #[tauri::command]
-pub fn db_delete_conversation(state: tauri::State<DbState>, conversation_id: String) -> Value {
-  if state.disabled {
-    return json!({ "success": true });
-  }
-  let guard = match lock_conn(&state) {
-    Ok(g) => g,
-    Err(err) => return json!({ "success": false, "error": err }),
-  };
-  let conn = match guard.as_ref() {
-    Some(conn) => conn,
-    None => return json!({ "success": false, "error": "DB not initialized" }),
-  };
+pub async fn project_settings_get(app: tauri::AppHandle, project_id: String) -> Value {
+  run_blocking(
+    json!({ "success": false, "error": "Task cancelled" }),
+    move || {
+      let state: tauri::State<DbState> = app.state();
+      if state.disabled {
+        return json!({ "success": false, "error": "DB disabled" });
+      }
+      let guard = match lock_conn(&state) {
+        Ok(g) => g,
+        Err(err) => return json!({ "success": false, "error": err }),
+      };
+      let conn = match guard.as_ref() {
+        Some(conn) => conn,
+        None => return json!({ "success": false, "error": "DB not initialized" }),
+      };
 
-  match conn.execute("DELETE FROM conversations WHERE id = ?1", params![conversation_id]) {
-    Ok(_) => json!({ "success": true }),
-    Err(err) => json!({ "success": false, "error": err.to_string() }),
-  }
+      match query_project_settings(conn, &project_id) {
+        Ok(settings) => json!({ "success": true, "settings": settings }),
+        Err(err) => json!({ "success": false, "error": err }),
+      }
+    },
+  )
+  .await
 }
 
 #[tauri::command]
-pub fn project_settings_get(state: tauri::State<DbState>, project_id: String) -> Value {
-  if state.disabled {
-    return json!({ "success": false, "error": "DB disabled" });
-  }
-  let guard = match lock_conn(&state) {
-    Ok(g) => g,
-    Err(err) => return json!({ "success": false, "error": err }),
-  };
-  let conn = match guard.as_ref() {
-    Some(conn) => conn,
-    None => return json!({ "success": false, "error": "DB not initialized" }),
-  };
-
-  match query_project_settings(conn, &project_id) {
-    Ok(settings) => json!({ "success": true, "settings": settings }),
-    Err(err) => json!({ "success": false, "error": err }),
-  }
-}
-
-#[tauri::command]
-pub fn project_settings_update(
-  state: tauri::State<DbState>,
+pub async fn project_settings_update(
+  app: tauri::AppHandle,
   args: ProjectSettingsUpdate,
 ) -> Value {
-  if state.disabled {
-    return json!({ "success": false, "error": "DB disabled" });
-  }
-  if args.base_ref.trim().is_empty() {
-    return json!({ "success": false, "error": "baseRef is required" });
-  }
-  let guard = match lock_conn(&state) {
-    Ok(g) => g,
-    Err(err) => return json!({ "success": false, "error": err }),
-  };
-  let conn = match guard.as_ref() {
-    Some(conn) => conn,
-    None => return json!({ "success": false, "error": "DB not initialized" }),
-  };
+  run_blocking(
+    json!({ "success": false, "error": "Task cancelled" }),
+    move || {
+      let state: tauri::State<DbState> = app.state();
+      if state.disabled {
+        return json!({ "success": false, "error": "DB disabled" });
+      }
+      if args.base_ref.trim().is_empty() {
+        return json!({ "success": false, "error": "baseRef is required" });
+      }
+      let guard = match lock_conn(&state) {
+        Ok(g) => g,
+        Err(err) => return json!({ "success": false, "error": err }),
+      };
+      let conn = match guard.as_ref() {
+        Some(conn) => conn,
+        None => return json!({ "success": false, "error": "DB not initialized" }),
+      };
 
-  let row = conn
-    .query_row(
-      "SELECT git_remote, git_branch FROM projects WHERE id = ?1 LIMIT 1",
-      params![args.project_id],
-      |row| Ok((row.get::<_, Option<String>>(0)?, row.get::<_, Option<String>>(1)?)),
-    )
-    .optional();
+      let row = conn
+        .query_row(
+          "SELECT git_remote, git_branch FROM projects WHERE id = ?1 LIMIT 1",
+          params![args.project_id],
+          |row| Ok((row.get::<_, Option<String>>(0)?, row.get::<_, Option<String>>(1)?)),
+        )
+        .optional();
 
-  let (git_remote, git_branch) = match row {
-    Ok(Some(data)) => data,
-    Ok(None) => return json!({ "success": false, "error": "Project not found" }),
-    Err(err) => return json!({ "success": false, "error": err.to_string() }),
-  };
+      let (git_remote, git_branch) = match row {
+        Ok(Some(data)) => data,
+        Ok(None) => return json!({ "success": false, "error": "Project not found" }),
+        Err(err) => return json!({ "success": false, "error": err.to_string() }),
+      };
 
-  let normalized = compute_base_ref(
-    Some(args.base_ref.as_str()),
-    git_remote.as_deref(),
-    git_branch.as_deref(),
-  );
+      let normalized = compute_base_ref(
+        Some(args.base_ref.as_str()),
+        git_remote.as_deref(),
+        git_branch.as_deref(),
+      );
 
-  if let Err(err) = conn.execute(
-    "UPDATE projects SET base_ref = ?1, updated_at = CURRENT_TIMESTAMP WHERE id = ?2",
-    params![normalized, args.project_id],
-  ) {
-    return json!({ "success": false, "error": err.to_string() });
-  }
+      if let Err(err) = conn.execute(
+        "UPDATE projects SET base_ref = ?1, updated_at = CURRENT_TIMESTAMP WHERE id = ?2",
+        params![normalized, args.project_id],
+      ) {
+        return json!({ "success": false, "error": err.to_string() });
+      }
 
-  match query_project_settings(conn, &args.project_id) {
-    Ok(settings) => json!({ "success": true, "settings": settings }),
-    Err(err) => json!({ "success": false, "error": err }),
-  }
+      match query_project_settings(conn, &args.project_id) {
+        Ok(settings) => json!({ "success": true, "settings": settings }),
+        Err(err) => json!({ "success": false, "error": err }),
+      }
+    },
+  )
+  .await
 }

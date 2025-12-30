@@ -1,4 +1,5 @@
 use crate::storage;
+use crate::runtime::run_blocking;
 use crate::telemetry;
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use serde::{Deserialize, Serialize};
@@ -264,127 +265,157 @@ fn require_auth(app: &tauri::AppHandle) -> Result<(JiraCreds, String), String> {
 }
 
 #[tauri::command]
-pub fn jira_save_credentials(app: tauri::AppHandle, args: JiraSaveArgs) -> Value {
-  let site = args.site_url.trim();
-  let email = args.email.trim();
-  let token = args.token.trim();
-  if site.is_empty() || email.is_empty() || token.is_empty() {
-    return json!({ "success": false, "error": "Site URL, email, and API token are required." });
-  }
+pub async fn jira_save_credentials(app: tauri::AppHandle, args: JiraSaveArgs) -> Value {
+  run_blocking(
+    json!({ "success": false, "error": "Task cancelled" }),
+    move || {
+      let site = args.site_url.trim();
+      let email = args.email.trim();
+      let token = args.token.trim();
+      if site.is_empty() || email.is_empty() || token.is_empty() {
+        return json!({ "success": false, "error": "Site URL, email, and API token are required." });
+      }
 
-  match get_myself(site, email, token) {
-    Ok(me) => {
-      if let Err(err) = store_token(token) {
-        return json!({ "success": false, "error": err });
+      match get_myself(site, email, token) {
+        Ok(me) => {
+          if let Err(err) = store_token(token) {
+            return json!({ "success": false, "error": err });
+          }
+          if let Err(err) = write_creds(&app, &JiraCreds { site_url: site.to_string(), email: email.to_string() }) {
+            return json!({ "success": false, "error": err });
+          }
+          let _ = telemetry::capture(&app, "jira_connected".to_string(), None);
+          json!({ "success": true, "displayName": me.get("displayName").and_then(|v| v.as_str()).unwrap_or("") })
+        }
+        Err(err) => json!({ "success": false, "error": err }),
       }
-      if let Err(err) = write_creds(&app, &JiraCreds { site_url: site.to_string(), email: email.to_string() }) {
-        return json!({ "success": false, "error": err });
-      }
-      let _ = telemetry::capture(&app, "jira_connected".to_string(), None);
-      json!({ "success": true, "displayName": me.get("displayName").and_then(|v| v.as_str()).unwrap_or("") })
-    }
-    Err(err) => json!({ "success": false, "error": err }),
-  }
+    },
+  )
+  .await
 }
 
 #[tauri::command]
-pub fn jira_clear_credentials(app: tauri::AppHandle) -> Value {
-  let _ = clear_token();
-  clear_creds(&app);
-  let _ = telemetry::capture(&app, "jira_disconnected".to_string(), None);
-  json!({ "success": true })
+pub async fn jira_clear_credentials(app: tauri::AppHandle) -> Value {
+  run_blocking(
+    json!({ "success": false, "error": "Task cancelled" }),
+    move || {
+      let _ = clear_token();
+      clear_creds(&app);
+      let _ = telemetry::capture(&app, "jira_disconnected".to_string(), None);
+      json!({ "success": true })
+    },
+  )
+  .await
 }
 
 #[tauri::command]
-pub fn jira_check_connection(app: tauri::AppHandle) -> Value {
-  let creds = match read_creds(&app) {
-    Some(c) => c,
-    None => return json!({ "connected": false }),
-  };
-  let token = match get_token() {
-    Ok(Some(t)) => t,
-    Ok(None) => return json!({ "connected": false }),
-    Err(err) => return json!({ "connected": false, "error": err }),
-  };
+pub async fn jira_check_connection(app: tauri::AppHandle) -> Value {
+  run_blocking(
+    json!({ "connected": false }),
+    move || {
+      let creds = match read_creds(&app) {
+        Some(c) => c,
+        None => return json!({ "connected": false }),
+      };
+      let token = match get_token() {
+        Ok(Some(t)) => t,
+        Ok(None) => return json!({ "connected": false }),
+        Err(err) => return json!({ "connected": false, "error": err }),
+      };
 
-  match get_myself(&creds.site_url, &creds.email, &token) {
-    Ok(me) => json!({
-      "connected": true,
-      "accountId": me.get("accountId").and_then(|v| v.as_str()),
-      "displayName": me.get("displayName").and_then(|v| v.as_str()),
-      "siteUrl": creds.site_url,
-    }),
-    Err(err) => json!({ "connected": false, "error": err }),
-  }
-}
-
-#[tauri::command]
-pub fn jira_initial_fetch(app: tauri::AppHandle, limit: Option<u32>) -> Value {
-  let (creds, token) = match require_auth(&app) {
-    Ok(res) => res,
-    Err(err) => return json!({ "success": false, "error": err }),
-  };
-  let limit = limit.unwrap_or(50).clamp(1, 100);
-  let jql_candidates = vec![
-    "assignee = currentUser() ORDER BY updated DESC",
-    "reporter = currentUser() ORDER BY updated DESC",
-    "ORDER BY updated DESC",
-  ];
-
-  for jql in jql_candidates {
-    if let Ok(issues) = search_raw(&creds.site_url, &creds.email, &token, jql, limit) {
-      if !issues.is_empty() {
-        return json!({ "success": true, "issues": normalize_issues(&creds.site_url, issues) });
+      match get_myself(&creds.site_url, &creds.email, &token) {
+        Ok(me) => json!({
+          "connected": true,
+          "accountId": me.get("accountId").and_then(|v| v.as_str()),
+          "displayName": me.get("displayName").and_then(|v| v.as_str()),
+          "siteUrl": creds.site_url,
+        }),
+        Err(err) => json!({ "connected": false, "error": err }),
       }
-    }
-  }
+    },
+  )
+  .await
+}
 
-  if let Ok(keys) = get_recent_issue_keys(&creds.site_url, &creds.email, &token, limit) {
-    if !keys.is_empty() {
-      let mut results = Vec::new();
-      for key in keys.into_iter().take(limit as usize) {
-        if let Ok(Some(issue)) = get_issue_by_key(&creds.site_url, &creds.email, &token, &key) {
-          results.push(issue);
+#[tauri::command]
+pub async fn jira_initial_fetch(app: tauri::AppHandle, limit: Option<u32>) -> Value {
+  run_blocking(
+    json!({ "success": false, "error": "Task cancelled" }),
+    move || {
+      let (creds, token) = match require_auth(&app) {
+        Ok(res) => res,
+        Err(err) => return json!({ "success": false, "error": err }),
+      };
+      let limit = limit.unwrap_or(50).clamp(1, 100);
+      let jql_candidates = vec![
+        "assignee = currentUser() ORDER BY updated DESC",
+        "reporter = currentUser() ORDER BY updated DESC",
+        "ORDER BY updated DESC",
+      ];
+
+      for jql in jql_candidates {
+        if let Ok(issues) = search_raw(&creds.site_url, &creds.email, &token, jql, limit) {
+          if !issues.is_empty() {
+            return json!({ "success": true, "issues": normalize_issues(&creds.site_url, issues) });
+          }
         }
       }
-      if !results.is_empty() {
-        return json!({ "success": true, "issues": normalize_issues(&creds.site_url, results) });
-      }
-    }
-  }
 
-  json!({ "success": true, "issues": [] })
+      if let Ok(keys) = get_recent_issue_keys(&creds.site_url, &creds.email, &token, limit) {
+        if !keys.is_empty() {
+          let mut results = Vec::new();
+          for key in keys.into_iter().take(limit as usize) {
+            if let Ok(Some(issue)) = get_issue_by_key(&creds.site_url, &creds.email, &token, &key) {
+              results.push(issue);
+            }
+          }
+          if !results.is_empty() {
+            return json!({ "success": true, "issues": normalize_issues(&creds.site_url, results) });
+          }
+        }
+      }
+
+      json!({ "success": true, "issues": [] })
+    },
+  )
+  .await
 }
 
 #[tauri::command]
-pub fn jira_search_issues(app: tauri::AppHandle, args: JiraSearchArgs) -> Value {
-  let term = args.search_term.trim();
-  if term.is_empty() {
-    return json!({ "success": true, "issues": [] });
-  }
+pub async fn jira_search_issues(app: tauri::AppHandle, args: JiraSearchArgs) -> Value {
+  run_blocking(
+    json!({ "success": false, "error": "Task cancelled" }),
+    move || {
+      let term = args.search_term.trim();
+      if term.is_empty() {
+        return json!({ "success": true, "issues": [] });
+      }
 
-  let (creds, token) = match require_auth(&app) {
-    Ok(res) => res,
-    Err(err) => return json!({ "success": false, "error": err }),
-  };
-  let limit = args.limit.unwrap_or(20).clamp(1, 100);
+      let (creds, token) = match require_auth(&app) {
+        Ok(res) => res,
+        Err(err) => return json!({ "success": false, "error": err }),
+      };
+      let limit = args.limit.unwrap_or(20).clamp(1, 100);
 
-  if looks_like_key(term) {
-    let key_upper = term.to_uppercase();
-    if let Ok(Some(issue)) = get_issue_by_key(&creds.site_url, &creds.email, &token, &key_upper) {
-      return json!({ "success": true, "issues": normalize_issues(&creds.site_url, vec![issue]) });
-    }
-  }
+      if looks_like_key(term) {
+        let key_upper = term.to_uppercase();
+        if let Ok(Some(issue)) = get_issue_by_key(&creds.site_url, &creds.email, &token, &key_upper) {
+          return json!({ "success": true, "issues": normalize_issues(&creds.site_url, vec![issue]) });
+        }
+      }
 
-  let sanitized = term.replace('"', "\\\"");
-  let extra_key = if looks_like_key(term) {
-    format!(" OR issueKey = {}", term.to_uppercase())
-  } else {
-    String::new()
-  };
-  let jql = format!("text ~ \"{}\"{}", sanitized, extra_key);
-  match search_raw(&creds.site_url, &creds.email, &token, &jql, limit) {
-    Ok(issues) => json!({ "success": true, "issues": normalize_issues(&creds.site_url, issues) }),
-    Err(err) => json!({ "success": false, "error": err }),
-  }
+      let sanitized = term.replace('"', "\\\"");
+      let extra_key = if looks_like_key(term) {
+        format!(" OR issueKey = {}", term.to_uppercase())
+      } else {
+        String::new()
+      };
+      let jql = format!("text ~ \"{}\"{}", sanitized, extra_key);
+      match search_raw(&creds.site_url, &creds.email, &token, &jql, limit) {
+        Ok(issues) => json!({ "success": true, "issues": normalize_issues(&creds.site_url, issues) }),
+        Err(err) => json!({ "success": false, "error": err }),
+      }
+    },
+  )
+  .await
 }

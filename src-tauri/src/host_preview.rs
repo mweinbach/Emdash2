@@ -1,3 +1,4 @@
+use crate::runtime::run_blocking;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -12,7 +13,7 @@ use std::sync::{
 };
 use std::thread;
 use std::time::Duration;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 
 #[derive(Default)]
 pub struct HostPreviewState {
@@ -231,256 +232,274 @@ fn run_command_streaming(
 }
 
 #[tauri::command]
-pub fn host_preview_setup(app: AppHandle, task_id: String, task_path: String) -> Value {
-  let cwd = PathBuf::from(&task_path);
-  if !cwd.exists() {
-    return json!({ "ok": false, "error": "task path not found" });
-  }
-  let pm = detect_package_manager(&cwd);
-  let args = install_args(pm, &cwd);
-  match run_command_streaming(&app, &task_id, pm, &args, &cwd) {
-    Ok(()) => json!({ "ok": true }),
-    Err(err) => json!({ "ok": false, "error": err }),
-  }
+pub async fn host_preview_setup(app: AppHandle, task_id: String, task_path: String) -> Value {
+  run_blocking(
+    json!({ "ok": false, "error": "Task cancelled" }),
+    move || {
+      let cwd = PathBuf::from(&task_path);
+      if !cwd.exists() {
+        return json!({ "ok": false, "error": "task path not found" });
+      }
+      let pm = detect_package_manager(&cwd);
+      let args = install_args(pm, &cwd);
+      match run_command_streaming(&app, &task_id, pm, &args, &cwd) {
+        Ok(()) => json!({ "ok": true }),
+        Err(err) => json!({ "ok": false, "error": err }),
+      }
+    },
+  )
+  .await
 }
 
 #[tauri::command]
-pub fn host_preview_start(
+pub async fn host_preview_start(
   app: AppHandle,
-  state: tauri::State<HostPreviewState>,
   task_id: String,
   task_path: String,
   script: Option<String>,
   parent_project_path: Option<String>,
 ) -> Value {
-  let cwd = PathBuf::from(&task_path);
-  if !cwd.exists() {
-    return json!({ "ok": false, "error": "task path not found" });
-  }
-
-  // Stop existing process for this task.
-  {
-    let mut map = state.procs.lock().unwrap();
-    if let Some(mut child) = map.remove(&task_id) {
-      let _ = child.kill();
-    }
-  }
-
-  if let Some(parent) = parent_project_path.as_ref().map(|s| s.trim()).filter(|s| !s.is_empty()) {
-    let parent_path = PathBuf::from(parent);
-    if parent_path.exists() {
-      try_link_node_modules(&cwd, &parent_path);
-    }
-  }
-
-  let pkg_path = cwd.join("package.json");
-  let pkg = read_package_json(&pkg_path);
-  let script_name = script
-    .as_ref()
-    .and_then(|s| {
-      let trimmed = s.trim();
-      if trimmed.is_empty() {
-        None
-      } else {
-        Some(trimmed.to_string())
+  run_blocking(
+    json!({ "ok": false, "error": "Task cancelled" }),
+    move || {
+      let state: tauri::State<HostPreviewState> = app.state();
+      let cwd = PathBuf::from(&task_path);
+      if !cwd.exists() {
+        return json!({ "ok": false, "error": "task path not found" });
       }
-    })
-    .unwrap_or_else(|| select_script(pkg.as_ref()));
 
-  let pm = detect_package_manager(&cwd);
-  let mut args: Vec<String> = if pm == "npm" || pm == "bun" {
-    vec!["run".to_string(), script_name.clone()]
-  } else {
-    vec![script_name.clone()]
-  };
+      // Stop existing process for this task.
+      {
+        let mut map = state.procs.lock().unwrap();
+        if let Some(mut child) = map.remove(&task_id) {
+          let _ = child.kill();
+        }
+      }
 
-  let mut envs: Vec<(String, String)> = Vec::new();
-  let preferred = [5173u16, 5174, 3001, 3002, 8080, 4200, 5500, 7000];
-  let port = pick_available_port(&preferred);
-  envs.push(("PORT".to_string(), port.to_string()));
-  envs.push(("VITE_PORT".to_string(), port.to_string()));
-  envs.push(("BROWSER".to_string(), "none".to_string()));
+      if let Some(parent) = parent_project_path.as_ref().map(|s| s.trim()).filter(|s| !s.is_empty()) {
+        let parent_path = PathBuf::from(parent);
+        if parent_path.exists() {
+          try_link_node_modules(&cwd, &parent_path);
+        }
+      }
 
-  // Add framework port hints.
-  if let Some(pkg) = pkg.as_ref() {
-    let script_cmd = pkg
-      .scripts
-      .as_ref()
-      .and_then(|s| s.get(&script_name))
-      .map(|s| s.to_lowercase())
-      .unwrap_or_default();
-    let deps = pkg
-      .dependencies
-      .as_ref()
-      .cloned()
-      .unwrap_or_default()
-      .into_iter()
-      .chain(
-        pkg.dev_dependencies
+      let pkg_path = cwd.join("package.json");
+      let pkg = read_package_json(&pkg_path);
+      let script_name = script
+        .as_ref()
+        .and_then(|s| {
+          let trimmed = s.trim();
+          if trimmed.is_empty() {
+            None
+          } else {
+            Some(trimmed.to_string())
+          }
+        })
+        .unwrap_or_else(|| select_script(pkg.as_ref()));
+
+      let pm = detect_package_manager(&cwd);
+      let mut args: Vec<String> = if pm == "npm" || pm == "bun" {
+        vec!["run".to_string(), script_name.clone()]
+      } else {
+        vec![script_name.clone()]
+      };
+
+      let mut envs: Vec<(String, String)> = Vec::new();
+      let preferred = [5173u16, 5174, 3001, 3002, 8080, 4200, 5500, 7000];
+      let port = pick_available_port(&preferred);
+      envs.push(("PORT".to_string(), port.to_string()));
+      envs.push(("VITE_PORT".to_string(), port.to_string()));
+      envs.push(("BROWSER".to_string(), "none".to_string()));
+
+      // Add framework port hints.
+      if let Some(pkg) = pkg.as_ref() {
+        let script_cmd = pkg
+          .scripts
+          .as_ref()
+          .and_then(|s| s.get(&script_name))
+          .map(|s| s.to_lowercase())
+          .unwrap_or_default();
+        let deps = pkg
+          .dependencies
           .as_ref()
           .cloned()
           .unwrap_or_default()
-          .into_iter(),
-      )
-      .collect::<HashMap<_, _>>();
-    let looks_like_next = script_cmd.contains("next") || deps.contains_key("next");
-    let looks_like_vite = script_cmd.contains("vite") || deps.contains_key("vite");
-    let looks_like_webpack = script_cmd.contains("webpack-dev-server")
-      || deps.contains_key("webpack-dev-server");
-    let looks_like_angular = script_cmd.contains("angular")
-      || script_cmd.split_whitespace().any(|s| s == "ng")
-      || deps.contains_key("@angular/cli");
-    let mut extra: Vec<String> = Vec::new();
-    if looks_like_next {
-      extra.push("-p".to_string());
-      extra.push(port.to_string());
-    } else if looks_like_vite || looks_like_webpack || looks_like_angular {
-      extra.push("--port".to_string());
-      extra.push(port.to_string());
-    }
-    if !extra.is_empty() {
-      if pm == "npm" || pm == "bun" {
-        args.push("--".to_string());
-      }
-      args.extend(extra);
-    }
-  }
-
-  let mut cmd = Command::new(pm);
-  cmd.args(&args)
-    .current_dir(&cwd)
-    .stdout(Stdio::piped())
-    .stderr(Stdio::piped());
-  for (key, value) in envs {
-    cmd.env(key, value);
-  }
-
-  let mut child = match cmd.spawn() {
-    Ok(child) => child,
-    Err(err) => return json!({ "ok": false, "error": err.to_string() }),
-  };
-
-  let url_emitted = Arc::new(AtomicBool::new(false));
-  let task_id_clone = task_id.clone();
-  let app_clone = app.clone();
-  let url_emitted_clone = url_emitted.clone();
-
-  let on_line = Arc::new(move |line: String| {
-    emit_event(
-      &app_clone,
-      json!({
-        "type": "setup",
-        "taskId": task_id_clone,
-        "status": "line",
-        "line": line
-      }),
-    );
-    if !url_emitted_clone.load(Ordering::SeqCst) {
-      if let Some(url) = normalize_url(&line) {
-        if !url_emitted_clone.swap(true, Ordering::SeqCst) {
-          emit_event(
-            &app_clone,
-            json!({ "type": "url", "taskId": task_id_clone, "url": url }),
-          );
+          .into_iter()
+          .chain(
+            pkg.dev_dependencies
+              .as_ref()
+              .cloned()
+              .unwrap_or_default()
+              .into_iter(),
+          )
+          .collect::<HashMap<_, _>>();
+        let looks_like_next = script_cmd.contains("next") || deps.contains_key("next");
+        let looks_like_vite = script_cmd.contains("vite") || deps.contains_key("vite");
+        let looks_like_webpack = script_cmd.contains("webpack-dev-server")
+          || deps.contains_key("webpack-dev-server");
+        let looks_like_angular = script_cmd.contains("angular")
+          || script_cmd.split_whitespace().any(|s| s == "ng")
+          || deps.contains_key("@angular/cli");
+        let mut extra: Vec<String> = Vec::new();
+        if looks_like_next {
+          extra.push("-p".to_string());
+          extra.push(port.to_string());
+        } else if looks_like_vite || looks_like_webpack || looks_like_angular {
+          extra.push("--port".to_string());
+          extra.push(port.to_string());
+        }
+        if !extra.is_empty() {
+          if pm == "npm" || pm == "bun" {
+            args.push("--".to_string());
+          }
+          args.extend(extra);
         }
       }
-    }
-  });
 
-  if let Some(stdout) = child.stdout.take() {
-    spawn_line_reader(stdout, on_line.clone());
-  }
-  if let Some(stderr) = child.stderr.take() {
-    spawn_line_reader(stderr, on_line);
-  }
-
-  {
-    let mut map = state.procs.lock().unwrap();
-    map.insert(task_id.clone(), child);
-  }
-
-  // Probe for server readiness and emit URL if needed.
-  let app_probe = app.clone();
-  let task_probe = task_id.clone();
-  let url_emitted_probe = url_emitted.clone();
-  thread::spawn(move || {
-    for _ in 0..40 {
-      if url_emitted_probe.load(Ordering::SeqCst) {
-        return;
+      let mut cmd = Command::new(pm);
+      cmd.args(&args)
+        .current_dir(&cwd)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+      for (key, value) in envs {
+        cmd.env(key, value);
       }
-      if probe_port("127.0.0.1", port) {
-        if !url_emitted_probe.swap(true, Ordering::SeqCst) {
-          emit_event(
-            &app_probe,
-            json!({
-              "type": "url",
-              "taskId": task_probe,
-              "url": format!("http://localhost:{port}")
-            }),
-          );
+
+      let mut child = match cmd.spawn() {
+        Ok(child) => child,
+        Err(err) => return json!({ "ok": false, "error": err.to_string() }),
+      };
+
+      let url_emitted = Arc::new(AtomicBool::new(false));
+      let task_id_clone = task_id.clone();
+      let app_clone = app.clone();
+      let url_emitted_clone = url_emitted.clone();
+
+      let on_line = Arc::new(move |line: String| {
+        emit_event(
+          &app_clone,
+          json!({
+            "type": "setup",
+            "taskId": task_id_clone,
+            "status": "line",
+            "line": line
+          }),
+        );
+        if !url_emitted_clone.load(Ordering::SeqCst) {
+          if let Some(url) = normalize_url(&line) {
+            if !url_emitted_clone.swap(true, Ordering::SeqCst) {
+              emit_event(
+                &app_clone,
+                json!({ "type": "url", "taskId": task_id_clone, "url": url }),
+              );
+            }
+          }
         }
-        return;
-      }
-      thread::sleep(Duration::from_millis(800));
-    }
-  });
+      });
 
-  // Monitor exit.
-  let procs = state.procs.clone();
-  let app_exit = app.clone();
-  let task_exit = task_id.clone();
-  thread::spawn(move || loop {
-    let status = {
-      let mut map = procs.lock().unwrap();
-      if let Some(child) = map.get_mut(&task_exit) {
-        child.try_wait().ok().flatten()
-      } else {
-        return;
+      if let Some(stdout) = child.stdout.take() {
+        spawn_line_reader(stdout, on_line.clone());
       }
-    };
-    if status.is_some() {
-      let mut map = procs.lock().unwrap();
-      map.remove(&task_exit);
-      emit_event(&app_exit, json!({ "type": "exit", "taskId": task_exit }));
-      return;
-    }
-    thread::sleep(Duration::from_millis(500));
-  });
+      if let Some(stderr) = child.stderr.take() {
+        spawn_line_reader(stderr, on_line);
+      }
 
-  json!({ "ok": true })
+      {
+        let mut map = state.procs.lock().unwrap();
+        map.insert(task_id.clone(), child);
+      }
+
+      // Probe for server readiness and emit URL if needed.
+      let app_probe = app.clone();
+      let task_probe = task_id.clone();
+      let url_emitted_probe = url_emitted.clone();
+      thread::spawn(move || {
+        for _ in 0..40 {
+          if url_emitted_probe.load(Ordering::SeqCst) {
+            return;
+          }
+          if probe_port("127.0.0.1", port) {
+            if !url_emitted_probe.swap(true, Ordering::SeqCst) {
+              emit_event(
+                &app_probe,
+                json!({
+                  "type": "url",
+                  "taskId": task_probe,
+                  "url": format!("http://localhost:{port}")
+                }),
+              );
+            }
+            return;
+          }
+          thread::sleep(Duration::from_millis(800));
+        }
+      });
+
+      // Monitor exit.
+      let procs = state.procs.clone();
+      let app_exit = app.clone();
+      let task_exit = task_id.clone();
+      thread::spawn(move || loop {
+        let status = {
+          let mut map = procs.lock().unwrap();
+          if let Some(child) = map.get_mut(&task_exit) {
+            child.try_wait().ok().flatten()
+          } else {
+            return;
+          }
+        };
+        if status.is_some() {
+          let mut map = procs.lock().unwrap();
+          map.remove(&task_exit);
+          emit_event(&app_exit, json!({ "type": "exit", "taskId": task_exit }));
+          return;
+        }
+        thread::sleep(Duration::from_millis(500));
+      });
+
+      json!({ "ok": true })
+    },
+  )
+  .await
 }
 
 #[tauri::command]
-pub fn host_preview_stop(
-  _app: AppHandle,
-  state: tauri::State<HostPreviewState>,
-  task_id: String,
-) -> Value {
-  let mut map = state.procs.lock().unwrap();
-  if let Some(mut child) = map.remove(&task_id) {
-    let _ = child.kill();
-  }
-  json!({ "ok": true })
+pub async fn host_preview_stop(app: AppHandle, task_id: String) -> Value {
+  run_blocking(
+    json!({ "ok": false, "error": "Task cancelled" }),
+    move || {
+      let state: tauri::State<HostPreviewState> = app.state();
+      let mut map = state.procs.lock().unwrap();
+      if let Some(mut child) = map.remove(&task_id) {
+        let _ = child.kill();
+      }
+      json!({ "ok": true })
+    },
+  )
+  .await
 }
 
 #[tauri::command]
-pub fn host_preview_stop_all(
-  _app: AppHandle,
-  state: tauri::State<HostPreviewState>,
-  except_id: Option<String>,
-) -> Value {
-  let except = except_id.unwrap_or_default();
-  let mut map = state.procs.lock().unwrap();
-  let mut stopped: Vec<String> = Vec::new();
-  let keys: Vec<String> = map.keys().cloned().collect();
-  for key in keys {
-    if !except.is_empty() && key == except {
-      continue;
-    }
-    if let Some(mut child) = map.remove(&key) {
-      let _ = child.kill();
-      stopped.push(key);
-    }
-  }
-  json!({ "ok": true, "stopped": stopped })
+pub async fn host_preview_stop_all(app: AppHandle, except_id: Option<String>) -> Value {
+  run_blocking(
+    json!({ "ok": false, "error": "Task cancelled" }),
+    move || {
+      let state: tauri::State<HostPreviewState> = app.state();
+      let except = except_id.unwrap_or_default();
+      let mut map = state.procs.lock().unwrap();
+      let mut stopped: Vec<String> = Vec::new();
+      let keys: Vec<String> = map.keys().cloned().collect();
+      for key in keys {
+        if !except.is_empty() && key == except {
+          continue;
+        }
+        if let Some(mut child) = map.remove(&key) {
+          let _ = child.kill();
+          stopped.push(key);
+        }
+      }
+      json!({ "ok": true, "stopped": stopped })
+    },
+  )
+  .await
 }

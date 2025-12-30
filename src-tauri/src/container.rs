@@ -1,4 +1,5 @@
 use base64::{engine::general_purpose::STANDARD, Engine as _};
+use crate::runtime::run_blocking;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -981,139 +982,148 @@ fn container_start_compose_run(
 }
 
 #[tauri::command]
-pub fn container_load_config(args: ContainerLoadArgs) -> Value {
-  let task_path = args.task_path.trim();
-  if task_path.is_empty() {
-    return json!({
-      "ok": false,
-      "error": {
-        "code": "INVALID_ARGUMENT",
-        "message": "`taskPath` must be a non-empty string",
-        "configPath": null,
-        "configKey": null
+pub async fn container_load_config(args: ContainerLoadArgs) -> Value {
+  run_blocking(
+    json!({ "ok": false, "error": { "code": "UNKNOWN", "message": "Task cancelled", "configPath": null, "configKey": null } }),
+    move || {
+      let task_path = args.task_path.trim();
+      if task_path.is_empty() {
+        return json!({
+          "ok": false,
+          "error": {
+            "code": "INVALID_ARGUMENT",
+            "message": "`taskPath` must be a non-empty string",
+            "configPath": null,
+            "configKey": null
+          }
+        });
       }
-    });
-  }
 
-  let result = load_task_container_config(Path::new(task_path));
-  if result.ok {
-    json!({
-      "ok": true,
-      "config": result.config,
-      "sourcePath": result.source_path,
-    })
-  } else {
-    let err = result.error.unwrap();
-    json!({
-      "ok": false,
-      "error": {
-        "code": err.code,
-        "message": err.message,
-        "configPath": err.config_path,
-        "configKey": err.config_key,
+      let result = load_task_container_config(Path::new(task_path));
+      if result.ok {
+        json!({
+          "ok": true,
+          "config": result.config,
+          "sourcePath": result.source_path,
+        })
+      } else {
+        let err = result.error.unwrap();
+        json!({
+          "ok": false,
+          "error": {
+            "code": err.code,
+            "message": err.message,
+            "configPath": err.config_path,
+            "configKey": err.config_key,
+          }
+        })
       }
-    })
-  }
+    },
+  )
+  .await
 }
 
 #[tauri::command]
-pub fn container_start_run(app: AppHandle, args: ContainerStartArgs) -> Value {
-  let task_id = args.task_id.trim();
-  let task_path = args.task_path.trim();
-  if task_id.is_empty() || task_path.is_empty() {
-    return json!({
-      "ok": false,
-      "error": {
-        "code": "INVALID_ARGUMENT",
-        "message": "`taskId` and `taskPath` are required",
-        "configPath": null,
-        "configKey": null,
+pub async fn container_start_run(app: AppHandle, args: ContainerStartArgs) -> Value {
+  run_blocking(
+    json!({ "ok": false, "error": { "code": "UNKNOWN", "message": "Task cancelled", "configPath": null, "configKey": null } }),
+    move || {
+      let task_id = args.task_id.trim();
+      let task_path = args.task_path.trim();
+      if task_id.is_empty() || task_path.is_empty() {
+        return json!({
+          "ok": false,
+          "error": {
+            "code": "INVALID_ARGUMENT",
+            "message": "`taskId` and `taskPath` are required",
+            "configPath": null,
+            "configKey": null,
+          }
+        });
       }
-    });
-  }
 
-  let load_result = load_task_container_config(Path::new(task_path));
-  if !load_result.ok {
-    let err = load_result.error.unwrap();
-    return json!({
-      "ok": false,
-      "error": {
-        "code": err.code,
-        "message": err.message,
-        "configPath": err.config_path,
-        "configKey": err.config_key,
+      let load_result = load_task_container_config(Path::new(task_path));
+      if !load_result.ok {
+        let err = load_result.error.unwrap();
+        return json!({
+          "ok": false,
+          "error": {
+            "code": err.code,
+            "message": err.message,
+            "configPath": err.config_path,
+            "configKey": err.config_key,
+          }
+        });
       }
-    });
-  }
-  let config = load_result.config.unwrap();
-  let run_id = args.run_id.unwrap_or_else(generate_run_id);
-  let mode = args.mode.unwrap_or_else(|| "container".to_string());
+      let config = load_result.config.unwrap();
+      let run_id = args.run_id.unwrap_or_else(generate_run_id);
+      let mode = args.mode.unwrap_or_else(|| "container".to_string());
 
-  if mode != "container" {
-    if let Err(err) = container_start_mock_run(&app, task_id, &run_id, &mode, &config) {
-      emit_error(&app, task_id, &run_id, &mode, "UNKNOWN", &err);
-      return json!({
-        "ok": false,
-        "error": {
-          "code": "UNKNOWN",
-          "message": err,
-          "configPath": null,
-          "configKey": null,
+      if mode != "container" {
+        if let Err(err) = container_start_mock_run(&app, task_id, &run_id, &mode, &config) {
+          emit_error(&app, task_id, &run_id, &mode, "UNKNOWN", &err);
+          return json!({
+            "ok": false,
+            "error": {
+              "code": "UNKNOWN",
+              "message": err,
+              "configPath": null,
+              "configKey": null,
+            }
+          });
         }
-      });
-    }
-    return json!({ "ok": true, "runId": run_id, "sourcePath": load_result.source_path });
-  }
-
-  let abs_task_path = PathBuf::from(task_path);
-  let workdir_abs = abs_task_path.join(&config.workdir);
-  if !workdir_abs.exists() {
-    let message = format!("Configured workdir does not exist: {}", workdir_abs.display());
-    emit_error(&app, task_id, &run_id, &mode, "INVALID_CONFIG", &message);
-    return json!({
-      "ok": false,
-      "error": {
-        "code": "INVALID_ARGUMENT",
-        "message": message,
-        "configPath": workdir_abs.to_string_lossy(),
-        "configKey": "workdir",
+        return json!({ "ok": true, "runId": run_id, "sourcePath": load_result.source_path });
       }
-    });
-  }
 
-  let pkg_json = workdir_abs.join("package.json");
-  if !pkg_json.exists() {
-    let message = format!(
-      "No package.json found in workdir: {}. Set the correct 'workdir' in .emdash/config.json",
-      workdir_abs.display()
-    );
-    emit_error(&app, task_id, &run_id, &mode, "INVALID_CONFIG", &message);
-    return json!({
-      "ok": false,
-      "error": {
-        "code": "INVALID_ARGUMENT",
-        "message": message,
-        "configPath": workdir_abs.to_string_lossy(),
-        "configKey": "workdir",
+      let abs_task_path = PathBuf::from(task_path);
+      let workdir_abs = abs_task_path.join(&config.workdir);
+      if !workdir_abs.exists() {
+        let message = format!("Configured workdir does not exist: {}", workdir_abs.display());
+        emit_error(&app, task_id, &run_id, &mode, "INVALID_CONFIG", &message);
+        return json!({
+          "ok": false,
+          "error": {
+            "code": "INVALID_ARGUMENT",
+            "message": message,
+            "configPath": workdir_abs.to_string_lossy(),
+            "configKey": "workdir",
+          }
+        });
       }
-    });
-  }
 
-  let docker_info = Command::new("docker")
-    .args(["info", "--format", "{{.ServerVersion}}"]) 
-    .output();
-  if docker_info.is_err() || !docker_info.as_ref().unwrap().status.success() {
-    let message = "Docker is not available or not responding. Please start Docker Desktop.";
-    emit_error(&app, task_id, &run_id, &mode, "DOCKER_NOT_AVAILABLE", message);
-    return json!({
-      "ok": false,
-      "error": {
-        "code": "UNKNOWN",
-        "message": message,
-        "configPath": null,
-        "configKey": null,
+      let pkg_json = workdir_abs.join("package.json");
+      if !pkg_json.exists() {
+        let message = format!(
+          "No package.json found in workdir: {}. Set the correct 'workdir' in .emdash/config.json",
+          workdir_abs.display()
+        );
+        emit_error(&app, task_id, &run_id, &mode, "INVALID_CONFIG", &message);
+        return json!({
+          "ok": false,
+          "error": {
+            "code": "INVALID_ARGUMENT",
+            "message": message,
+            "configPath": workdir_abs.to_string_lossy(),
+            "configKey": "workdir",
+          }
+        });
       }
-    });
+
+      let docker_info = Command::new("docker")
+        .args(["info", "--format", "{{.ServerVersion}}"]) 
+        .output();
+      if docker_info.is_err() || !docker_info.as_ref().unwrap().status.success() {
+        let message = "Docker is not available or not responding. Please start Docker Desktop.";
+        emit_error(&app, task_id, &run_id, &mode, "DOCKER_NOT_AVAILABLE", message);
+        return json!({
+          "ok": false,
+          "error": {
+            "code": "UNKNOWN",
+            "message": message,
+            "configPath": null,
+            "configKey": null,
+          }
+        });
   }
 
   if let Some(compose_file) = find_compose_file(&abs_task_path) {
@@ -1250,56 +1260,71 @@ pub fn container_start_run(app: AppHandle, args: ContainerStartArgs) -> Value {
   emit_lifecycle(&app, task_id, &run_id, &mode, "ready", None);
 
   json!({ "ok": true, "runId": run_id, "sourcePath": load_result.source_path })
+    },
+  )
+  .await
 }
 
 #[tauri::command]
-pub fn container_stop_run(app: AppHandle, args: ContainerStopArgs) -> Value {
-  let task_id = args.task_id.trim();
-  if task_id.is_empty() {
-    return json!({ "ok": false, "error": "`taskId` must be provided" });
-  }
+pub async fn container_stop_run(app: AppHandle, args: ContainerStopArgs) -> Value {
+  run_blocking(
+    json!({ "ok": false, "error": "Task cancelled" }),
+    move || {
+      let task_id = args.task_id.trim();
+      if task_id.is_empty() {
+        return json!({ "ok": false, "error": "`taskId` must be provided" });
+      }
 
-  let run_id = generate_run_id();
-  let mode = "container";
-  emit_lifecycle(&app, task_id, &run_id, mode, "stopping", None);
+      let run_id = generate_run_id();
+      let mode = "container";
+      emit_lifecycle(&app, task_id, &run_id, mode, "stopping", None);
 
-  let container_name = format!("emdash_ws_{}", task_id);
-  let _ = Command::new("docker")
-    .args(["compose", "-p", &container_name, "down", "-v"])
-    .output();
-  let _ = Command::new("docker").args(["rm", "-f", &container_name]).output();
+      let container_name = format!("emdash_ws_{}", task_id);
+      let _ = Command::new("docker")
+        .args(["compose", "-p", &container_name, "down", "-v"])
+        .output();
+      let _ = Command::new("docker").args(["rm", "-f", &container_name]).output();
 
-  emit_lifecycle(&app, task_id, &run_id, mode, "stopped", None);
-  json!({ "ok": true })
+      emit_lifecycle(&app, task_id, &run_id, mode, "stopped", None);
+      json!({ "ok": true })
+    },
+  )
+  .await
 }
 
 #[tauri::command]
-pub fn container_inspect_run(args: ContainerInspectArgs) -> Value {
-  let task_id = args.task_id.trim();
-  if task_id.is_empty() {
-    return json!({ "ok": false, "error": "`taskId` must be provided" });
-  }
-  let project = format!("emdash_ws_{}", task_id);
-  let output = Command::new("docker")
-    .args(["compose", "-p", &project, "ps", "--format", "json"])
-    .output();
-  let output = match output {
-    Ok(out) => out,
-    Err(err) => return json!({ "ok": false, "error": err.to_string() }),
-  };
-  if !output.status.success() {
-    return json!({ "ok": false, "error": String::from_utf8_lossy(&output.stderr).to_string() });
-  }
-  let stdout = String::from_utf8_lossy(&output.stdout);
-  let ports = parse_compose_ps(&stdout, &[]);
-  let running = stdout.to_lowercase().contains("running");
-  let preview_service = choose_preview_service_from_published(&ports);
-  json!({
-    "ok": true,
-    "running": running,
-    "ports": ports,
-    "previewService": preview_service,
-  })
+pub async fn container_inspect_run(args: ContainerInspectArgs) -> Value {
+  run_blocking(
+    json!({ "ok": false, "error": "Task cancelled" }),
+    move || {
+      let task_id = args.task_id.trim();
+      if task_id.is_empty() {
+        return json!({ "ok": false, "error": "`taskId` must be provided" });
+      }
+      let project = format!("emdash_ws_{}", task_id);
+      let output = Command::new("docker")
+        .args(["compose", "-p", &project, "ps", "--format", "json"])
+        .output();
+      let output = match output {
+        Ok(out) => out,
+        Err(err) => return json!({ "ok": false, "error": err.to_string() }),
+      };
+      if !output.status.success() {
+        return json!({ "ok": false, "error": String::from_utf8_lossy(&output.stderr).to_string() });
+      }
+      let stdout = String::from_utf8_lossy(&output.stdout);
+      let ports = parse_compose_ps(&stdout, &[]);
+      let running = stdout.to_lowercase().contains("running");
+      let preview_service = choose_preview_service_from_published(&ports);
+      json!({
+        "ok": true,
+        "running": running,
+        "ports": ports,
+        "previewService": preview_service,
+      })
+    },
+  )
+  .await
 }
 
 fn to_slug(name: &str) -> String {
@@ -1396,56 +1421,63 @@ fn fetch_https(url: &str, max_bytes: usize) -> Option<(Vec<u8>, String)> {
 }
 
 #[tauri::command]
-pub fn icons_resolve_service(app: AppHandle, args: ResolveIconArgs) -> Value {
-  let service = args.service.trim();
-  if service.is_empty() {
-    return json!({ "ok": false });
-  }
-  let slug = to_slug(service);
+pub async fn icons_resolve_service(app: AppHandle, args: ResolveIconArgs) -> Value {
+  run_blocking(
+    json!({ "ok": false }),
+    move || {
+      let service = args.service.trim();
+      if service.is_empty() {
+        return json!({ "ok": false });
+      }
+      let slug = to_slug(service);
 
-  if let Some(task_path) = args.task_path.as_deref() {
-    let base = Path::new(task_path)
-      .join(".emdash")
-      .join("service-icons");
-    let exts = ["svg", "png", "jpg", "jpeg", "ico"];
-    for ext in exts {
-      let candidate = base.join(format!("{}.{}", slug, ext));
-      if candidate.exists() {
-        if let Some(data_url) = read_file_as_data_url(&candidate) {
+      if let Some(task_path) = args.task_path.as_deref() {
+        let base = Path::new(task_path)
+          .join(".emdash")
+          .join("service-icons");
+        let exts = ["svg", "png", "jpg", "jpeg", "ico"];
+        for ext in exts {
+          let candidate = base.join(format!("{}.{}", slug, ext));
+          if candidate.exists() {
+            if let Some(data_url) = read_file_as_data_url(&candidate) {
+              return json!({ "ok": true, "dataUrl": data_url });
+            }
+          }
+        }
+      }
+
+      let cache_dir = app
+        .path()
+        .app_data_dir()
+        .ok()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("icons");
+      let _ = fs::create_dir_all(&cache_dir);
+      let cache_file = cache_dir.join(format!("{}.ico", slug));
+      if cache_file.exists() {
+        if let Some(data_url) = read_file_as_data_url(&cache_file) {
           return json!({ "ok": true, "dataUrl": data_url });
         }
       }
-    }
-  }
 
-  let cache_dir = app
-    .path()
-    .app_data_dir()
-    .ok()
-    .unwrap_or_else(|| PathBuf::from("."))
-    .join("icons");
-  let _ = fs::create_dir_all(&cache_dir);
-  let cache_file = cache_dir.join(format!("{}.ico", slug));
-  if cache_file.exists() {
-    if let Some(data_url) = read_file_as_data_url(&cache_file) {
-      return json!({ "ok": true, "dataUrl": data_url });
-    }
-  }
-
-  if args.allow_network.unwrap_or(false) {
-    if let Some(domain) = get_known_domain(service) {
-      if allowlisted(domain) {
-        let ddg_url = format!("https://icons.duckduckgo.com/ip3/{}.ico", domain);
-        let direct_url = format!("https://{}/favicon.ico", domain);
-        let fetched = fetch_https(&ddg_url, 200_000).or_else(|| fetch_https(&direct_url, 200_000));
-        if let Some((bytes, ct)) = fetched {
-          let _ = fs::write(&cache_file, &bytes);
-          let data_url = buffer_to_data_url(&bytes, &ct);
-          return json!({ "ok": true, "dataUrl": data_url });
+      if args.allow_network.unwrap_or(false) {
+        if let Some(domain) = get_known_domain(service) {
+          if allowlisted(domain) {
+            let ddg_url = format!("https://icons.duckduckgo.com/ip3/{}.ico", domain);
+            let direct_url = format!("https://{}/favicon.ico", domain);
+            let fetched =
+              fetch_https(&ddg_url, 200_000).or_else(|| fetch_https(&direct_url, 200_000));
+            if let Some((bytes, ct)) = fetched {
+              let _ = fs::write(&cache_file, &bytes);
+              let data_url = buffer_to_data_url(&bytes, &ct);
+              return json!({ "ok": true, "dataUrl": data_url });
+            }
+          }
         }
       }
-    }
-  }
 
-  json!({ "ok": false })
+      json!({ "ok": false })
+    },
+  )
+  .await
 }

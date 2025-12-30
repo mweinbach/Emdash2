@@ -1,4 +1,5 @@
 use semver::Version;
+use crate::runtime::run_blocking;
 use serde_json::{json, Value};
 use std::fs::File;
 use std::io::{Read, Write};
@@ -141,116 +142,130 @@ fn version_is_newer(latest: &str, current: &str) -> bool {
 }
 
 #[tauri::command]
-pub fn update_check(app: AppHandle, state: tauri::State<UpdateState>) -> Value {
-  if is_dev_mode() && std::env::var("EMDASH_DEV_UPDATES") != Ok("true".to_string()) {
-    return json!({ "success": false, "error": "Updates are disabled in development.", "devDisabled": true });
-  }
+pub async fn update_check(app: AppHandle) -> Value {
+  run_blocking(
+    json!({ "success": false, "error": "Task cancelled" }),
+    move || {
+      let state: tauri::State<UpdateState> = app.state();
+      if is_dev_mode() && std::env::var("EMDASH_DEV_UPDATES") != Ok("true".to_string()) {
+        return json!({ "success": false, "error": "Updates are disabled in development.", "devDisabled": true });
+      }
 
-  emit_update(&app, "checking", None);
+      emit_update(&app, "checking", None);
 
-  let latest = match fetch_latest_release() {
-    Ok(info) => info,
-    Err(err) => {
-      emit_update(&app, "error", Some(json!({ "message": err.clone() })));
-      return json!({ "success": false, "error": err });
-    }
-  };
+      let latest = match fetch_latest_release() {
+        Ok(info) => info,
+        Err(err) => {
+          emit_update(&app, "error", Some(json!({ "message": err.clone() })));
+          return json!({ "success": false, "error": err });
+        }
+      };
 
-  let current = current_version(&app);
-  let available = version_is_newer(&latest.version, &current);
-  let payload = json!({
-    "version": latest.version,
-    "notes": latest.notes,
-    "publishedAt": latest.published_at,
-  });
+      let current = current_version(&app);
+      let available = version_is_newer(&latest.version, &current);
+      let payload = json!({
+        "version": latest.version,
+        "notes": latest.notes,
+        "publishedAt": latest.published_at,
+      });
 
-  if available {
-    emit_update(&app, "available", Some(payload.clone()));
-  } else {
-    emit_update(&app, "not-available", Some(payload.clone()));
-  }
+      if available {
+        emit_update(&app, "available", Some(payload.clone()));
+      } else {
+        emit_update(&app, "not-available", Some(payload.clone()));
+      }
 
-  let mut guard = state.latest.lock().unwrap();
-  *guard = Some(latest);
+      let mut guard = state.latest.lock().unwrap();
+      *guard = Some(latest);
 
-  json!({ "success": true, "result": payload })
+      json!({ "success": true, "result": payload })
+    },
+  )
+  .await
 }
 
 #[tauri::command]
-pub fn update_download(app: AppHandle, state: tauri::State<UpdateState>) -> Value {
-  if is_dev_mode() && std::env::var("EMDASH_DEV_UPDATES") != Ok("true".to_string()) {
-    return json!({ "success": false, "error": "Cannot download updates in development.", "devDisabled": true });
-  }
-
-  let latest = state.latest.lock().unwrap().clone();
-  let release = match latest {
-    Some(info) => info,
-    None => {
-      return json!({ "success": false, "error": "No update available" });
-    }
-  };
-
-  let url = release.download_url.unwrap_or_else(fallback_download_url);
-  let resp = match ureq::get(&url).set("User-Agent", "emdash-tauri").call() {
-    Ok(resp) => resp,
-    Err(err) => {
-      emit_update(&app, "error", Some(json!({ "message": err.to_string() })));
-      return json!({ "success": false, "error": err.to_string() });
-    }
-  };
-
-  let total = resp.header("Content-Length").and_then(|v| v.parse::<u64>().ok());
-  let mut reader = resp.into_reader();
-
-  let cache_dir = app
-    .path()
-    .app_cache_dir()
-    .ok()
-    .unwrap_or_else(std::env::temp_dir);
-  let _ = std::fs::create_dir_all(&cache_dir);
-  let filename = choose_asset_name();
-  let dest = cache_dir.join(filename);
-  let mut file = match File::create(&dest) {
-    Ok(f) => f,
-    Err(err) => return json!({ "success": false, "error": err.to_string() }),
-  };
-
-  let mut buf = [0u8; 8192];
-  let mut transferred: u64 = 0;
-  loop {
-    let read = match reader.read(&mut buf) {
-      Ok(0) => break,
-      Ok(n) => n,
-      Err(err) => {
-        emit_update(&app, "error", Some(json!({ "message": err.to_string() })));
-        return json!({ "success": false, "error": err.to_string() });
+pub async fn update_download(app: AppHandle) -> Value {
+  run_blocking(
+    json!({ "success": false, "error": "Task cancelled" }),
+    move || {
+      let state: tauri::State<UpdateState> = app.state();
+      if is_dev_mode() && std::env::var("EMDASH_DEV_UPDATES") != Ok("true".to_string()) {
+        return json!({ "success": false, "error": "Cannot download updates in development.", "devDisabled": true });
       }
-    };
-    if file.write_all(&buf[..read]).is_err() {
-      return json!({ "success": false, "error": "Failed to write update file" });
-    }
-    transferred += read as u64;
-    let percent = total.map(|t| (transferred as f64 / t as f64 * 100.0).min(100.0));
-    emit_update(
-      &app,
-      "download-progress",
-      Some(json!({
-        "percent": percent.unwrap_or(0.0),
-        "transferred": transferred,
-        "total": total.unwrap_or(0),
-      })),
-    );
-  }
 
-  #[cfg(target_os = "linux")]
-  {
-    let _ = std::fs::set_permissions(&dest, std::fs::Permissions::from_mode(0o755));
-  }
+      let latest = state.latest.lock().unwrap().clone();
+      let release = match latest {
+        Some(info) => info,
+        None => {
+          return json!({ "success": false, "error": "No update available" });
+        }
+      };
 
-  *state.downloaded_path.lock().unwrap() = Some(dest.clone());
-  emit_update(&app, "downloaded", Some(json!({ "path": dest.to_string_lossy() })));
+      let url = release.download_url.unwrap_or_else(fallback_download_url);
+      let resp = match ureq::get(&url).set("User-Agent", "emdash-tauri").call() {
+        Ok(resp) => resp,
+        Err(err) => {
+          emit_update(&app, "error", Some(json!({ "message": err.to_string() })));
+          return json!({ "success": false, "error": err.to_string() });
+        }
+      };
 
-  json!({ "success": true })
+      let total = resp.header("Content-Length").and_then(|v| v.parse::<u64>().ok());
+      let mut reader = resp.into_reader();
+
+      let cache_dir = app
+        .path()
+        .app_cache_dir()
+        .ok()
+        .unwrap_or_else(std::env::temp_dir);
+      let _ = std::fs::create_dir_all(&cache_dir);
+      let filename = choose_asset_name();
+      let dest = cache_dir.join(filename);
+      let mut file = match File::create(&dest) {
+        Ok(f) => f,
+        Err(err) => return json!({ "success": false, "error": err.to_string() }),
+      };
+
+      let mut buf = [0u8; 8192];
+      let mut transferred: u64 = 0;
+      loop {
+        let read = match reader.read(&mut buf) {
+          Ok(0) => break,
+          Ok(n) => n,
+          Err(err) => {
+            emit_update(&app, "error", Some(json!({ "message": err.to_string() })));
+            return json!({ "success": false, "error": err.to_string() });
+          }
+        };
+        if file.write_all(&buf[..read]).is_err() {
+          return json!({ "success": false, "error": "Failed to write update file" });
+        }
+        transferred += read as u64;
+        let percent = total.map(|t| (transferred as f64 / t as f64 * 100.0).min(100.0));
+        emit_update(
+          &app,
+          "download-progress",
+          Some(json!({
+            "percent": percent.unwrap_or(0.0),
+            "transferred": transferred,
+            "total": total.unwrap_or(0),
+          })),
+        );
+      }
+
+      #[cfg(target_os = "linux")]
+      {
+        let _ = std::fs::set_permissions(&dest, std::fs::Permissions::from_mode(0o755));
+      }
+
+      *state.downloaded_path.lock().unwrap() = Some(dest.clone());
+      emit_update(&app, "downloaded", Some(json!({ "path": dest.to_string_lossy() })));
+
+      json!({ "success": true })
+    },
+  )
+  .await
 }
 
 #[tauri::command]

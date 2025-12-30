@@ -2,11 +2,14 @@ import { useEffect, useRef, useState } from 'react';
 import { classifyActivity } from '../lib/activityClassifier';
 import { BUSY_HOLD_MS, CLEAR_BUSY_MS } from '../lib/activityConstants';
 
+const IDLE_AFTER_MS = 12_000;
+
 export function usePtyBusy(ptyId?: string, provider?: string) {
   const [busy, setBusy] = useState(false);
   const busySinceRef = useRef<number | null>(null);
   const clearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const busyRef = useRef(false);
+  const lastActivityRef = useRef<number | null>(null);
 
   const clearTimer = () => {
     if (clearTimerRef.current) {
@@ -19,6 +22,7 @@ export function usePtyBusy(ptyId?: string, provider?: string) {
     if (next) {
       clearTimer();
       busySinceRef.current = Date.now();
+      lastActivityRef.current = Date.now();
       setBusy((prev) => {
         if (prev) return prev;
         return true;
@@ -34,6 +38,7 @@ export function usePtyBusy(ptyId?: string, provider?: string) {
     const clearNow = () => {
       clearTimer();
       busySinceRef.current = null;
+      lastActivityRef.current = null;
       busyRef.current = false;
       setBusy(false);
     };
@@ -65,6 +70,7 @@ export function usePtyBusy(ptyId?: string, provider?: string) {
     }
 
     const offData = api.onPtyData(ptyId, (chunk: string) => {
+      lastActivityRef.current = Date.now();
       const signal = classifyActivity(provider, chunk || '');
       if (signal === 'busy') {
         setBusyState(true);
@@ -79,6 +85,14 @@ export function usePtyBusy(ptyId?: string, provider?: string) {
       setBusyState(false);
     });
 
+    const idleInterval = setInterval(() => {
+      if (!busyRef.current) return;
+      const last = lastActivityRef.current;
+      if (last && Date.now() - last > IDLE_AFTER_MS) {
+        setBusyState(false);
+      }
+    }, 2_000);
+
     return () => {
       clearTimer();
       try {
@@ -87,6 +101,7 @@ export function usePtyBusy(ptyId?: string, provider?: string) {
       try {
         offExit?.();
       } catch {}
+      clearInterval(idleInterval);
     };
   }, [ptyId, provider]);
 

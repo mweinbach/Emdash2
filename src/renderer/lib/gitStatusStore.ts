@@ -165,7 +165,7 @@ export function subscribeGitStatus(
   subs.set(listener, intervalMs);
   listeners.set(taskPath, subs);
 
-  const cached = cache.get(taskPath);
+  const cached = cache.get(taskPath) ?? null;
   const hasCache = cache.has(taskPath);
   if (hasCache) {
     try {

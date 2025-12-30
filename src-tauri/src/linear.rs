@@ -1,3 +1,4 @@
+use crate::runtime::run_blocking;
 use crate::telemetry;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -155,84 +156,103 @@ fn normalize_issues(raw: Vec<Value>) -> Vec<Value> {
 }
 
 #[tauri::command]
-pub fn linear_save_token(app: tauri::AppHandle, token: String) -> Value {
-  let trimmed = token.trim();
-  if trimmed.is_empty() {
-    return json!({ "success": false, "error": "A Linear API token is required." });
-  }
-
-  match fetch_viewer(trimmed) {
-    Ok(viewer) => {
-      if let Err(err) = store_token(trimmed) {
-        return json!({ "success": false, "error": err });
+pub async fn linear_save_token(app: tauri::AppHandle, token: String) -> Value {
+  run_blocking(
+    json!({ "success": false, "error": "Task cancelled" }),
+    move || {
+      let trimmed = token.trim();
+      if trimmed.is_empty() {
+        return json!({ "success": false, "error": "A Linear API token is required." });
       }
-      let workspace = viewer
-        .organization
-        .as_ref()
-        .and_then(|org| org.name.clone())
-        .or_else(|| viewer.display_name.clone())
-        .or_else(|| viewer.name.clone());
 
-      let _ = telemetry::capture(&app, "linear_connected".to_string(), None);
+      match fetch_viewer(trimmed) {
+        Ok(viewer) => {
+          if let Err(err) = store_token(trimmed) {
+            return json!({ "success": false, "error": err });
+          }
+          let workspace = viewer
+            .organization
+            .as_ref()
+            .and_then(|org| org.name.clone())
+            .or_else(|| viewer.display_name.clone())
+            .or_else(|| viewer.name.clone());
 
-      json!({
-        "success": true,
-        "workspaceName": workspace,
-        "taskName": workspace,
-      })
-    }
-    Err(err) => json!({ "success": false, "error": err }),
-  }
+          let _ = telemetry::capture(&app, "linear_connected".to_string(), None);
+
+          json!({
+            "success": true,
+            "workspaceName": workspace,
+            "taskName": workspace,
+          })
+        }
+        Err(err) => json!({ "success": false, "error": err }),
+      }
+    },
+  )
+  .await
 }
 
 #[tauri::command]
-pub fn linear_clear_token(app: tauri::AppHandle) -> Value {
-  match clear_token() {
-    Ok(_) => {
-      let _ = telemetry::capture(&app, "linear_disconnected".to_string(), None);
-      json!({ "success": true })
-    }
-    Err(err) => json!({ "success": false, "error": err }),
-  }
+pub async fn linear_clear_token(app: tauri::AppHandle) -> Value {
+  run_blocking(
+    json!({ "success": false, "error": "Task cancelled" }),
+    move || match clear_token() {
+      Ok(_) => {
+        let _ = telemetry::capture(&app, "linear_disconnected".to_string(), None);
+        json!({ "success": true })
+      }
+      Err(err) => json!({ "success": false, "error": err }),
+    },
+  )
+  .await
 }
 
 #[tauri::command]
-pub fn linear_check_connection() -> Value {
-  let token = match get_token() {
-    Ok(Some(token)) => token,
-    Ok(None) => return json!({ "connected": false }),
-    Err(err) => return json!({ "connected": false, "error": err }),
-  };
+pub async fn linear_check_connection() -> Value {
+  run_blocking(
+    json!({ "connected": false }),
+    move || {
+      let token = match get_token() {
+        Ok(Some(token)) => token,
+        Ok(None) => return json!({ "connected": false }),
+        Err(err) => return json!({ "connected": false, "error": err }),
+      };
 
-  match fetch_viewer(&token) {
-    Ok(viewer) => {
-      let workspace = viewer
-        .organization
-        .as_ref()
-        .and_then(|org| org.name.clone())
-        .or_else(|| viewer.display_name.clone())
-        .or_else(|| viewer.name.clone());
-      json!({
-        "connected": true,
-        "workspaceName": workspace,
-        "taskName": workspace,
-        "viewer": viewer,
-      })
-    }
-    Err(err) => json!({ "connected": false, "error": err }),
-  }
+      match fetch_viewer(&token) {
+        Ok(viewer) => {
+          let workspace = viewer
+            .organization
+            .as_ref()
+            .and_then(|org| org.name.clone())
+            .or_else(|| viewer.display_name.clone())
+            .or_else(|| viewer.name.clone());
+          json!({
+            "connected": true,
+            "workspaceName": workspace,
+            "taskName": workspace,
+            "viewer": viewer,
+          })
+        }
+        Err(err) => json!({ "connected": false, "error": err }),
+      }
+    },
+  )
+  .await
 }
 
 #[tauri::command]
-pub fn linear_initial_fetch(limit: Option<u32>) -> Value {
-  let token = match get_token() {
-    Ok(Some(token)) => token,
-    Ok(None) => return json!({ "success": false, "error": "Linear token not set." }),
-    Err(err) => return json!({ "success": false, "error": err }),
-  };
+pub async fn linear_initial_fetch(limit: Option<u32>) -> Value {
+  run_blocking(
+    json!({ "success": false, "error": "Task cancelled" }),
+    move || {
+      let token = match get_token() {
+        Ok(Some(token)) => token,
+        Ok(None) => return json!({ "success": false, "error": "Linear token not set." }),
+        Err(err) => return json!({ "success": false, "error": err }),
+      };
 
-  let sanitized_limit = limit.unwrap_or(50).clamp(1, 200) as i64;
-  let query = r#"
+      let sanitized_limit = limit.unwrap_or(50).clamp(1, 200) as i64;
+      let query = r#"
     query ListIssues($limit: Int!) {
       issues(first: $limit, orderBy: updatedAt) {
         nodes {
@@ -249,39 +269,45 @@ pub fn linear_initial_fetch(limit: Option<u32>) -> Value {
         }
       }
     }
-  "#;
+      "#;
 
-  let data: Result<LinearIssuesResponse, String> =
-    graphql(&token, query, Some(json!({ "limit": sanitized_limit })));
+      let data: Result<LinearIssuesResponse, String> =
+        graphql(&token, query, Some(json!({ "limit": sanitized_limit })));
 
-  match data {
-    Ok(resp) => {
-      let nodes = resp
-        .issues
-        .and_then(|issues| issues.nodes)
-        .unwrap_or_default();
-      let open = normalize_issues(nodes);
-      json!({ "success": true, "issues": open })
-    }
-    Err(err) => json!({ "success": false, "error": err }),
-  }
+      match data {
+        Ok(resp) => {
+          let nodes = resp
+            .issues
+            .and_then(|issues| issues.nodes)
+            .unwrap_or_default();
+          let open = normalize_issues(nodes);
+          json!({ "success": true, "issues": open })
+        }
+        Err(err) => json!({ "success": false, "error": err }),
+      }
+    },
+  )
+  .await
 }
 
 #[tauri::command]
-pub fn linear_search_issues(args: LinearSearchArgs) -> Value {
-  let term = args.search_term.trim();
-  if term.is_empty() {
-    return json!({ "success": false, "error": "Search term is required." });
-  }
+pub async fn linear_search_issues(args: LinearSearchArgs) -> Value {
+  run_blocking(
+    json!({ "success": false, "error": "Task cancelled" }),
+    move || {
+      let term = args.search_term.trim();
+      if term.is_empty() {
+        return json!({ "success": false, "error": "Search term is required." });
+      }
 
-  let token = match get_token() {
-    Ok(Some(token)) => token,
-    Ok(None) => return json!({ "success": false, "error": "Linear token not set." }),
-    Err(err) => return json!({ "success": false, "error": err }),
-  };
+      let token = match get_token() {
+        Ok(Some(token)) => token,
+        Ok(None) => return json!({ "success": false, "error": "Linear token not set." }),
+        Err(err) => return json!({ "success": false, "error": err }),
+      };
 
-  let sanitized_limit = args.limit.unwrap_or(20).clamp(1, 200) as i64;
-  let query = r#"
+      let sanitized_limit = args.limit.unwrap_or(20).clamp(1, 200) as i64;
+      let query = r#"
     query ListAllIssues($limit: Int!) {
       issues(first: $limit, orderBy: updatedAt) {
         nodes {
@@ -298,43 +324,46 @@ pub fn linear_search_issues(args: LinearSearchArgs) -> Value {
         }
       }
     }
-  "#;
+      "#;
 
-  let data: Result<LinearIssuesResponse, String> =
-    graphql(&token, query, Some(json!({ "limit": 100 })));
+      let data: Result<LinearIssuesResponse, String> =
+        graphql(&token, query, Some(json!({ "limit": 100 })));
 
-  match data {
-    Ok(resp) => {
-      let nodes = resp
-        .issues
-        .and_then(|issues| issues.nodes)
-        .unwrap_or_default();
-      let open = normalize_issues(nodes);
-      let term_lower = term.to_lowercase();
-      let filtered: Vec<Value> = open
-        .into_iter()
-        .filter(|issue| {
-          let id = issue.get("identifier").and_then(|v| v.as_str()).unwrap_or("");
-          let title = issue.get("title").and_then(|v| v.as_str()).unwrap_or("");
-          let assignee = issue
-            .get("assignee")
-            .and_then(|v| v.get("name"))
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
-          let assignee_display = issue
-            .get("assignee")
-            .and_then(|v| v.get("displayName"))
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
-          id.to_lowercase().contains(&term_lower)
-            || title.to_lowercase().contains(&term_lower)
-            || assignee.to_lowercase().contains(&term_lower)
-            || assignee_display.to_lowercase().contains(&term_lower)
-        })
-        .take(sanitized_limit as usize)
-        .collect();
-      json!({ "success": true, "issues": filtered })
-    }
-    Err(err) => json!({ "success": false, "error": err }),
-  }
+      match data {
+        Ok(resp) => {
+          let nodes = resp
+            .issues
+            .and_then(|issues| issues.nodes)
+            .unwrap_or_default();
+          let open = normalize_issues(nodes);
+          let term_lower = term.to_lowercase();
+          let filtered: Vec<Value> = open
+            .into_iter()
+            .filter(|issue| {
+              let id = issue.get("identifier").and_then(|v| v.as_str()).unwrap_or("");
+              let title = issue.get("title").and_then(|v| v.as_str()).unwrap_or("");
+              let assignee = issue
+                .get("assignee")
+                .and_then(|v| v.get("name"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+              let assignee_display = issue
+                .get("assignee")
+                .and_then(|v| v.get("displayName"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+              id.to_lowercase().contains(&term_lower)
+                || title.to_lowercase().contains(&term_lower)
+                || assignee.to_lowercase().contains(&term_lower)
+                || assignee_display.to_lowercase().contains(&term_lower)
+            })
+            .take(sanitized_limit as usize)
+            .collect();
+          json!({ "success": true, "issues": filtered })
+        }
+        Err(err) => json!({ "success": false, "error": err }),
+      }
+    },
+  )
+  .await
 }

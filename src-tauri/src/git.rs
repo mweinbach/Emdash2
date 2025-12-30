@@ -1,8 +1,10 @@
 use crate::db::{self, DbState};
 use crate::providers;
+use crate::runtime::run_blocking;
+use tauri::Manager;
 use serde::Serialize;
 use serde_json::{json, Value};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -317,6 +319,74 @@ fn parse_numstat(output: &str) -> (i64, i64) {
   (additions, deletions)
 }
 
+fn normalize_git_path(raw: &str) -> String {
+  let trimmed = raw.trim();
+  if trimmed.is_empty() {
+    return String::new();
+  }
+
+  // Handle rename output like "old -> new"
+  if let Some(idx) = trimmed.rfind("->") {
+    return trimmed[idx + 2..].trim().to_string();
+  }
+
+  // Handle rename output like "src/{old => new}.rs"
+  if let (Some(start), Some(end)) = (trimmed.find('{'), trimmed.rfind('}')) {
+    if start < end {
+      let inside = &trimmed[start + 1..end];
+      if let Some(idx) = inside.rfind("=>") {
+        let prefix = &trimmed[..start];
+        let suffix = &trimmed[end + 1..];
+        let replacement = inside[idx + 2..].trim();
+        return format!("{}{}{}", prefix, replacement, suffix);
+      }
+    }
+  }
+
+  trimmed.to_string()
+}
+
+fn parse_numstat_map(output: &str) -> HashMap<String, (i64, i64)> {
+  let mut map = HashMap::new();
+  for line in output.lines() {
+    let line = line.trim();
+    if line.is_empty() {
+      continue;
+    }
+    let mut parts = line.split('\t');
+    let add_str = parts.next();
+    let del_str = parts.next();
+    let path_raw = parts.collect::<Vec<_>>().join("\t");
+    if path_raw.is_empty() {
+      continue;
+    }
+    if let (Some(add_str), Some(del_str)) = (add_str, del_str) {
+      let add = if add_str == "-" {
+        0
+      } else {
+        add_str.parse::<i64>().unwrap_or(0)
+      };
+      let del = if del_str == "-" {
+        0
+      } else {
+        del_str.parse::<i64>().unwrap_or(0)
+      };
+      let path = normalize_git_path(&path_raw);
+      if path.is_empty() {
+        continue;
+      }
+      map
+        .entry(path)
+        .and_modify(|entry: &mut (i64, i64)| {
+          entry.0 += add;
+          entry.1 += del;
+        })
+        .or_insert((add, del));
+    }
+  }
+  map
+}
+
 fn count_file_lines(path: &Path) -> i64 {
   if let Ok(buf) = fs::read(path) {
     return buf.iter().filter(|b| **b == b'\n').count() as i64;
@@ -476,8 +546,7 @@ struct DiffLine {
   kind: String,
 }
 
-#[tauri::command]
-pub fn git_get_info(project_path: String) -> Value {
+fn git_get_info_sync(project_path: String) -> Value {
   let resolved_path = resolve_real_path(Path::new(&project_path));
   let resolved_str = resolved_path.to_string_lossy().to_string();
   let git_path = resolved_path.join(".git");
@@ -553,7 +622,16 @@ pub fn git_get_info(project_path: String) -> Value {
 }
 
 #[tauri::command]
-pub fn git_get_status(task_path: String) -> Value {
+pub async fn git_get_info(project_path: String) -> Value {
+  let fallback_path = project_path.clone();
+  run_blocking(
+    json!({ "isGitRepo": false, "path": fallback_path, "error": "git_get_info failed" }),
+    move || git_get_info_sync(project_path),
+  )
+  .await
+}
+
+fn git_get_status_sync(task_path: String) -> Value {
   let resolved_path = resolve_real_path(Path::new(&task_path));
   if run_git(&resolved_path, &["rev-parse", "--is-inside-work-tree"]).is_err() {
     return json!({ "success": true, "changes": Vec::<GitChange>::new() });
@@ -570,6 +648,15 @@ pub fn git_get_status(task_path: String) -> Value {
   if status_output.trim().is_empty() {
     return json!({ "success": true, "changes": Vec::<GitChange>::new() });
   }
+
+  let staged_map = run_git(&resolved_path, &["diff", "--numstat", "--cached", "--"])
+    .ok()
+    .map(|output| parse_numstat_map(&output))
+    .unwrap_or_default();
+  let unstaged_map = run_git(&resolved_path, &["diff", "--numstat", "--"])
+    .ok()
+    .map(|output| parse_numstat_map(&output))
+    .unwrap_or_default();
 
   let mut changes: Vec<GitChange> = Vec::new();
   for raw_line in status_output.lines() {
@@ -605,19 +692,21 @@ pub fn git_get_status(task_path: String) -> Value {
     let mut additions = 0;
     let mut deletions = 0;
 
-    if let Ok(output) = run_git(
-      &resolved_path,
-      &["diff", "--numstat", "--cached", "--", &file_path],
-    ) {
-      let (add, del) = parse_numstat(&output);
-      additions += add;
-      deletions += del;
+    let normalized_path = normalize_git_path(&file_path);
+    if let Some((add, del)) = staged_map.get(&normalized_path) {
+      additions += *add;
+      deletions += *del;
+    } else if let Some((add, del)) = staged_map.get(&file_path) {
+      additions += *add;
+      deletions += *del;
     }
 
-    if let Ok(output) = run_git(&resolved_path, &["diff", "--numstat", "--", &file_path]) {
-      let (add, del) = parse_numstat(&output);
-      additions += add;
-      deletions += del;
+    if let Some((add, del)) = unstaged_map.get(&normalized_path) {
+      additions += *add;
+      deletions += *del;
+    } else if let Some((add, del)) = unstaged_map.get(&file_path) {
+      additions += *add;
+      deletions += *del;
     }
 
     if additions == 0 && deletions == 0 && status_code.contains('?') {
@@ -640,7 +729,16 @@ pub fn git_get_status(task_path: String) -> Value {
 }
 
 #[tauri::command]
-pub fn git_get_file_diff(task_path: String, file_path: String) -> Value {
+pub async fn git_get_status(task_path: String) -> Value {
+  let fallback_path = task_path.clone();
+  run_blocking(
+    json!({ "success": false, "error": "git_get_status failed", "taskPath": fallback_path }),
+    move || git_get_status_sync(task_path),
+  )
+  .await
+}
+
+fn git_get_file_diff_sync(task_path: String, file_path: String) -> Value {
   let resolved_path = resolve_real_path(Path::new(&task_path));
   let diff_output = run_git(
     &resolved_path,
@@ -719,7 +817,20 @@ pub fn git_get_file_diff(task_path: String, file_path: String) -> Value {
 }
 
 #[tauri::command]
-pub fn git_stage_file(task_path: String, file_path: String) -> Value {
+pub async fn git_get_file_diff(task_path: String, file_path: String) -> Value {
+  let fallback_task_path = task_path.clone();
+  run_blocking(
+    json!({
+      "success": false,
+      "error": "git_get_file_diff failed",
+      "taskPath": fallback_task_path,
+    }),
+    move || git_get_file_diff_sync(task_path, file_path),
+  )
+  .await
+}
+
+fn git_stage_file_sync(task_path: String, file_path: String) -> Value {
   let resolved_path = resolve_real_path(Path::new(&task_path));
   match run_git(&resolved_path, &["add", "--", &file_path]) {
     Ok(_) => json!({ "success": true }),
@@ -728,7 +839,16 @@ pub fn git_stage_file(task_path: String, file_path: String) -> Value {
 }
 
 #[tauri::command]
-pub fn git_revert_file(task_path: String, file_path: String) -> Value {
+pub async fn git_stage_file(task_path: String, file_path: String) -> Value {
+  let fallback_path = task_path.clone();
+  run_blocking(
+    json!({ "success": false, "error": "git_stage_file failed", "taskPath": fallback_path }),
+    move || git_stage_file_sync(task_path, file_path),
+  )
+  .await
+}
+
+fn git_revert_file_sync(task_path: String, file_path: String) -> Value {
   let resolved_path = resolve_real_path(Path::new(&task_path));
   if let Ok(staged) = run_git(
     &resolved_path,
@@ -764,7 +884,16 @@ pub fn git_revert_file(task_path: String, file_path: String) -> Value {
 }
 
 #[tauri::command]
-pub fn git_commit_and_push(
+pub async fn git_revert_file(task_path: String, file_path: String) -> Value {
+  let fallback_path = task_path.clone();
+  run_blocking(
+    json!({ "success": false, "error": "git_revert_file failed", "taskPath": fallback_path }),
+    move || git_revert_file_sync(task_path, file_path),
+  )
+  .await
+}
+
+fn git_commit_and_push_sync(
   task_path: String,
   commit_message: Option<String>,
   create_branch_if_on_default: Option<bool>,
@@ -863,7 +992,25 @@ pub fn git_commit_and_push(
 }
 
 #[tauri::command]
-pub fn git_get_branch_status(task_path: String) -> Value {
+pub async fn git_commit_and_push(
+  task_path: String,
+  commit_message: Option<String>,
+  create_branch_if_on_default: Option<bool>,
+  branch_prefix: Option<String>,
+) -> Value {
+  let fallback_path = task_path.clone();
+  run_blocking(
+    json!({
+      "success": false,
+      "error": "git_commit_and_push failed",
+      "taskPath": fallback_path,
+    }),
+    move || git_commit_and_push_sync(task_path, commit_message, create_branch_if_on_default, branch_prefix),
+  )
+  .await
+}
+
+fn git_get_branch_status_sync(task_path: String) -> Value {
   let resolved_path = resolve_real_path(Path::new(&task_path));
   if let Err(err) = run_git(&resolved_path, &["rev-parse", "--is-inside-work-tree"]) {
     return json!({ "success": false, "error": err });
@@ -937,7 +1084,20 @@ pub fn git_get_branch_status(task_path: String) -> Value {
 }
 
 #[tauri::command]
-pub fn git_get_pr_status(task_path: String) -> Value {
+pub async fn git_get_branch_status(task_path: String) -> Value {
+  let fallback_path = task_path.clone();
+  run_blocking(
+    json!({
+      "success": false,
+      "error": "git_get_branch_status failed",
+      "taskPath": fallback_path,
+    }),
+    move || git_get_branch_status_sync(task_path),
+  )
+  .await
+}
+
+fn git_get_pr_status_sync(task_path: String) -> Value {
   let resolved_path = resolve_real_path(Path::new(&task_path));
   if let Err(err) = run_git(&resolved_path, &["rev-parse", "--is-inside-work-tree"]) {
     return json!({ "success": false, "error": err });
@@ -1040,7 +1200,16 @@ pub fn git_get_pr_status(task_path: String) -> Value {
 }
 
 #[tauri::command]
-pub fn git_list_remote_branches(project_path: String, remote: Option<String>) -> Value {
+pub async fn git_get_pr_status(task_path: String) -> Value {
+  let fallback_path = task_path.clone();
+  run_blocking(
+    json!({ "success": false, "error": "git_get_pr_status failed", "taskPath": fallback_path }),
+    move || git_get_pr_status_sync(task_path),
+  )
+  .await
+}
+
+fn git_list_remote_branches_sync(project_path: String, remote: Option<String>) -> Value {
   if project_path.trim().is_empty() {
     return json!({ "success": false, "error": "projectPath is required" });
   }
@@ -1090,6 +1259,20 @@ pub fn git_list_remote_branches(project_path: String, remote: Option<String>) ->
     .collect();
 
   json!({ "success": true, "branches": branches })
+}
+
+#[tauri::command]
+pub async fn git_list_remote_branches(project_path: String, remote: Option<String>) -> Value {
+  let fallback_path = project_path.clone();
+  run_blocking(
+    json!({
+      "success": false,
+      "error": "git_list_remote_branches failed",
+      "projectPath": fallback_path,
+    }),
+    move || git_list_remote_branches_sync(project_path, remote),
+  )
+  .await
 }
 
 fn parse_output_lines(output: &str) -> Vec<String> {
@@ -1586,18 +1769,13 @@ fn generate_fallback_content(changed_files: &[String]) -> (String, String) {
   (title, description)
 }
 
-#[tauri::command]
-pub fn git_generate_pr_content(
-  state: tauri::State<DbState>,
-  task_path: String,
-  base: Option<String>,
-) -> Value {
+fn git_generate_pr_content_sync(state: &DbState, task_path: String, base: Option<String>) -> Value {
   let resolved_path = resolve_real_path(Path::new(&task_path));
-  let mut preferred_provider = db::task_agent_id_for_path(&state, &task_path);
+  let mut preferred_provider = db::task_agent_id_for_path(state, &task_path);
   if preferred_provider.is_none() {
     let resolved_str = resolved_path.to_string_lossy();
     if resolved_str != task_path {
-      preferred_provider = db::task_agent_id_for_path(&state, resolved_str.as_ref());
+      preferred_provider = db::task_agent_id_for_path(state, resolved_str.as_ref());
     }
   }
   let preferred_provider = preferred_provider.and_then(|id| {
@@ -1725,12 +1903,29 @@ pub fn git_generate_pr_content(
   }
 
   let title = generate_pr_title(&commits, &changed_files);
-  let description = generate_pr_description(&commits, &changed_files, file_count, insertions, deletions);
+  let description =
+    generate_pr_description(&commits, &changed_files, file_count, insertions, deletions);
   json!({ "success": true, "title": title, "description": description })
 }
 
 #[tauri::command]
-pub fn git_create_pr(
+pub async fn git_generate_pr_content(app: tauri::AppHandle, task_path: String, base: Option<String>) -> Value {
+  let fallback_path = task_path.clone();
+  run_blocking(
+    json!({
+      "success": false,
+      "error": "git_generate_pr_content failed",
+      "taskPath": fallback_path,
+    }),
+    move || {
+      let state: tauri::State<DbState> = app.state();
+      git_generate_pr_content_sync(&state, task_path, base)
+    },
+  )
+  .await
+}
+
+fn git_create_pr_sync(
   task_path: String,
   title: Option<String>,
   body: Option<String>,
@@ -1991,4 +2186,23 @@ pub fn git_create_pr(
     "url": url,
     "output": combined
   })
+}
+
+#[tauri::command]
+pub async fn git_create_pr(
+  task_path: String,
+  title: Option<String>,
+  body: Option<String>,
+  base: Option<String>,
+  head: Option<String>,
+  draft: Option<bool>,
+  web: Option<bool>,
+  fill: Option<bool>,
+) -> Value {
+  let fallback_path = task_path.clone();
+  run_blocking(
+    json!({ "success": false, "error": "git_create_pr failed", "taskPath": fallback_path }),
+    move || git_create_pr_sync(task_path, title, body, base, head, draft, web, fill),
+  )
+  .await
 }

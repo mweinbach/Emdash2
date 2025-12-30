@@ -1,4 +1,5 @@
 use crate::db::{self, DbState, ProjectSettingsRow};
+use crate::runtime::run_blocking;
 use crate::settings;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
@@ -9,7 +10,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use std::sync::{Arc, Mutex};
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -543,130 +544,136 @@ pub fn list_worktrees_internal(
 }
 
 #[tauri::command]
-pub fn worktree_create(
-  app: AppHandle,
-  state: State<WorktreeState>,
-  db_state: State<DbState>,
-  args: WorktreeCreateArgs,
-) -> Value {
-  let project_path = args.project_path.trim();
-  let task_name = args.task_name.trim();
-  let project_id = args.project_id.trim();
+pub async fn worktree_create(app: AppHandle, args: WorktreeCreateArgs) -> Value {
+  run_blocking(
+    json!({ "success": false, "error": "Task cancelled" }),
+    move || {
+      let state: State<WorktreeState> = app.state();
+      let db_state: State<DbState> = app.state();
+      let project_path = args.project_path.trim();
+      let task_name = args.task_name.trim();
+      let project_id = args.project_id.trim();
 
-  if project_path.is_empty() || task_name.is_empty() || project_id.is_empty() {
-    return json!({ "success": false, "error": "Missing required parameters" });
-  }
+      if project_path.is_empty() || task_name.is_empty() || project_id.is_empty() {
+        return json!({ "success": false, "error": "Missing required parameters" });
+      }
 
-  let slugged = slugify(task_name);
-  let timestamp = Utc::now().timestamp_millis().to_string();
-  let template = branch_template(&app);
-  let branch_name = render_branch_template(&template, &slugged, &timestamp);
+      let slugged = slugify(task_name);
+      let timestamp = Utc::now().timestamp_millis().to_string();
+      let template = branch_template(&app);
+      let branch_name = render_branch_template(&template, &slugged, &timestamp);
 
-  let worktree_path = Path::new(project_path)
-    .join("..")
-    .join("worktrees")
-    .join(format!("{}-{}", slugged, timestamp));
+      let worktree_path = Path::new(project_path)
+        .join("..")
+        .join("worktrees")
+        .join(format!("{}-{}", slugged, timestamp));
 
-  if worktree_path.exists() {
-    return json!({
-      "success": false,
-      "error": format!("Worktree directory already exists: {}", worktree_path.display())
-    });
-  }
+      if worktree_path.exists() {
+        return json!({
+          "success": false,
+          "error": format!("Worktree directory already exists: {}", worktree_path.display())
+        });
+      }
 
-  if let Some(parent) = worktree_path.parent() {
-    if let Err(err) = fs::create_dir_all(parent) {
-      return json!({ "success": false, "error": err.to_string() });
-    }
-  }
+      if let Some(parent) = worktree_path.parent() {
+        if let Err(err) = fs::create_dir_all(parent) {
+          return json!({ "success": false, "error": err.to_string() });
+        }
+      }
 
-  let project_path_buf = PathBuf::from(project_path);
-  let row = match db::project_settings_row(&db_state, project_id) {
-    Ok(row) => row,
-    Err(err) => return json!({ "success": false, "error": err }),
-  };
+      let project_path_buf = PathBuf::from(project_path);
+      let row = match db::project_settings_row(&db_state, project_id) {
+        Ok(row) => row,
+        Err(err) => return json!({ "success": false, "error": err }),
+      };
 
-  let base_ref = match resolve_project_base_ref(&project_path_buf, &row) {
-    Ok(info) => info,
-    Err(err) => return json!({ "success": false, "error": err }),
-  };
+      let base_ref = match resolve_project_base_ref(&project_path_buf, &row) {
+        Ok(info) => info,
+        Err(err) => return json!({ "success": false, "error": err }),
+      };
 
-  let fetched = match fetch_base_ref_with_fallback(&project_path_buf, project_id, &base_ref, &db_state) {
-    Ok(info) => info,
-    Err(err) => return json!({ "success": false, "error": err }),
-  };
+      let fetched =
+        match fetch_base_ref_with_fallback(&project_path_buf, project_id, &base_ref, &db_state) {
+          Ok(info) => info,
+          Err(err) => return json!({ "success": false, "error": err }),
+        };
 
-  let args_vec = vec![
-    "worktree".to_string(),
-    "add".to_string(),
-    "-b".to_string(),
-    branch_name.clone(),
-    worktree_path.to_string_lossy().to_string(),
-    fetched.full_ref.clone(),
-  ];
+      let args_vec = vec![
+        "worktree".to_string(),
+        "add".to_string(),
+        "-b".to_string(),
+        branch_name.clone(),
+        worktree_path.to_string_lossy().to_string(),
+        fetched.full_ref.clone(),
+      ];
 
-  if let Err(err) = run_command_vec("git", &args_vec, Some(&project_path_buf)) {
-    return json!({ "success": false, "error": err });
-  }
+      if let Err(err) = run_command_vec("git", &args_vec, Some(&project_path_buf)) {
+        return json!({ "success": false, "error": err });
+      }
 
-  if !worktree_path.exists() {
-    return json!({
-      "success": false,
-      "error": format!("Worktree directory was not created: {}", worktree_path.display())
-    });
-  }
+      if !worktree_path.exists() {
+        return json!({
+          "success": false,
+          "error": format!("Worktree directory was not created: {}", worktree_path.display())
+        });
+      }
 
-  ensure_codex_log_ignored(&worktree_path);
-  if args.auto_approve.unwrap_or(false) {
-    ensure_claude_auto_approve(&worktree_path);
-  }
+      ensure_codex_log_ignored(&worktree_path);
+      if args.auto_approve.unwrap_or(false) {
+        ensure_claude_auto_approve(&worktree_path);
+      }
 
-  let worktree_info = WorktreeInfo {
-    id: stable_id_from_path(&worktree_path.to_string_lossy()),
-    name: task_name.to_string(),
-    branch: branch_name.clone(),
-    path: worktree_path.to_string_lossy().to_string(),
-    project_id: project_id.to_string(),
-    status: "active".to_string(),
-    created_at: Utc::now().to_rfc3339(),
-    last_activity: None,
-  };
+      let worktree_info = WorktreeInfo {
+        id: stable_id_from_path(&worktree_path.to_string_lossy()),
+        name: task_name.to_string(),
+        branch: branch_name.clone(),
+        path: worktree_path.to_string_lossy().to_string(),
+        project_id: project_id.to_string(),
+        status: "active".to_string(),
+        created_at: Utc::now().to_rfc3339(),
+        last_activity: None,
+      };
 
-  state
-    .inner
-    .lock()
-    .unwrap()
-    .insert(worktree_info.id.clone(), worktree_info.clone());
+      state
+        .inner
+        .lock()
+        .unwrap()
+        .insert(worktree_info.id.clone(), worktree_info.clone());
 
-  if should_push_on_create(&app) {
-    let _ = run_command(
-      "git",
-      &["push", "--set-upstream", "origin", &branch_name],
-      Some(&worktree_path),
-    );
-  }
+      if should_push_on_create(&app) {
+        let _ = run_command(
+          "git",
+          &["push", "--set-upstream", "origin", &branch_name],
+          Some(&worktree_path),
+        );
+      }
 
-  json!({ "success": true, "worktree": worktree_info })
+      json!({ "success": true, "worktree": worktree_info })
+    },
+  )
+  .await
 }
 
 #[tauri::command]
-pub fn worktree_list(
-  app: AppHandle,
-  state: State<WorktreeState>,
-  args: WorktreeListArgs,
-) -> Value {
-  let project_path = args.project_path.trim();
-  if project_path.is_empty() {
-    return json!({ "success": false, "error": "projectPath is required" });
-  }
-  match list_worktrees_internal(&app, &state, project_path) {
-    Ok(worktrees) => json!({ "success": true, "worktrees": worktrees }),
-    Err(err) => json!({ "success": false, "error": err }),
-  }
+pub async fn worktree_list(app: AppHandle, args: WorktreeListArgs) -> Value {
+  run_blocking(
+    json!({ "success": false, "error": "Task cancelled" }),
+    move || {
+      let state: State<WorktreeState> = app.state();
+      let project_path = args.project_path.trim();
+      if project_path.is_empty() {
+        return json!({ "success": false, "error": "projectPath is required" });
+      }
+      match list_worktrees_internal(&app, &state, project_path) {
+        Ok(worktrees) => json!({ "success": true, "worktrees": worktrees }),
+        Err(err) => json!({ "success": false, "error": err }),
+      }
+    },
+  )
+  .await
 }
 
-#[tauri::command]
-pub fn worktree_remove(state: State<WorktreeState>, args: WorktreeRemoveArgs) -> Value {
+fn worktree_remove_internal(state: &WorktreeState, args: WorktreeRemoveArgs) -> Value {
   let project_path = args.project_path.trim();
   if project_path.is_empty() {
     return json!({ "success": false, "error": "projectPath is required" });
@@ -755,107 +762,147 @@ pub fn worktree_remove(state: State<WorktreeState>, args: WorktreeRemoveArgs) ->
 }
 
 #[tauri::command]
-pub fn worktree_status(args: WorktreeStatusArgs) -> Value {
-  let worktree_path = args.worktree_path.trim();
-  if worktree_path.is_empty() {
-    return json!({ "success": false, "error": "worktreePath is required" });
-  }
-
-  let output = match run_command(
-    "git",
-    &["status", "--porcelain", "--untracked-files=all"],
-    Some(Path::new(worktree_path)),
-  ) {
-    Ok(out) => out,
-    Err(err) => return json!({ "success": false, "error": err }),
-  };
-
-  let mut staged_files: Vec<String> = Vec::new();
-  let mut unstaged_files: Vec<String> = Vec::new();
-  let mut untracked_files: Vec<String> = Vec::new();
-
-  let stdout = String::from_utf8_lossy(&output.stdout);
-  for line in stdout.lines() {
-    if line.trim().is_empty() {
-      continue;
-    }
-    if line.starts_with("??") {
-      untracked_files.push(line[3..].to_string());
-      continue;
-    }
-    let status = &line[..2];
-    let file = line[3..].to_string();
-    if status.contains('A') || status.contains('M') || status.contains('D') {
-      staged_files.push(file.clone());
-    }
-    if status.contains('M') || status.contains('D') {
-      unstaged_files.push(file.clone());
-    }
-  }
-
-  let has_changes = !staged_files.is_empty() || !unstaged_files.is_empty() || !untracked_files.is_empty();
-
-  json!({
-    "success": true,
-    "status": {
-      "hasChanges": has_changes,
-      "stagedFiles": staged_files,
-      "unstagedFiles": unstaged_files,
-      "untrackedFiles": untracked_files,
-    }
-  })
-}
-
-#[tauri::command]
-pub fn worktree_merge(state: State<WorktreeState>, args: WorktreeMergeArgs) -> Value {
-  let project_path = args.project_path.trim();
-  if project_path.is_empty() {
-    return json!({ "success": false, "error": "projectPath is required" });
-  }
-
-  let guard = state.inner.lock().unwrap();
-  let worktree = match guard.get(&args.worktree_id) {
-    Some(wt) => wt.clone(),
-    None => return json!({ "success": false, "error": "Worktree not found" }),
-  };
-  drop(guard);
-
-  let project_path_buf = PathBuf::from(project_path);
-  let default_branch = get_default_branch(&project_path_buf);
-  if let Err(err) = run_command("git", &["checkout", &default_branch], Some(&project_path_buf)) {
-    return json!({ "success": false, "error": err });
-  }
-  if let Err(err) = run_command("git", &["merge", &worktree.branch], Some(&project_path_buf)) {
-    return json!({ "success": false, "error": err });
-  }
-
-  let _ = worktree_remove(
-    state,
-    WorktreeRemoveArgs {
-      project_path: project_path.to_string(),
-      worktree_id: worktree.id.clone(),
-      worktree_path: Some(worktree.path.clone()),
-      branch: Some(worktree.branch.clone()),
+pub async fn worktree_remove(app: AppHandle, args: WorktreeRemoveArgs) -> Value {
+  run_blocking(
+    json!({ "success": false, "error": "Task cancelled" }),
+    move || {
+      let state: State<WorktreeState> = app.state();
+      worktree_remove_internal(&state, args)
     },
-  );
-
-  json!({ "success": true })
+  )
+  .await
 }
 
 #[tauri::command]
-pub fn worktree_get(state: State<WorktreeState>, args: WorktreeGetArgs) -> Value {
-  let guard = state.inner.lock().unwrap();
-  match guard.get(&args.worktree_id) {
-    Some(wt) => json!({ "success": true, "worktree": wt }),
-    None => json!({ "success": false, "error": "Worktree not found" }),
-  }
+pub async fn worktree_status(args: WorktreeStatusArgs) -> Value {
+  run_blocking(
+    json!({ "success": false, "error": "Task cancelled" }),
+    move || {
+      let worktree_path = args.worktree_path.trim();
+      if worktree_path.is_empty() {
+        return json!({ "success": false, "error": "worktreePath is required" });
+      }
+
+      let output = match run_command(
+        "git",
+        &["status", "--porcelain", "--untracked-files=all"],
+        Some(Path::new(worktree_path)),
+      ) {
+        Ok(out) => out,
+        Err(err) => return json!({ "success": false, "error": err }),
+      };
+
+      let mut staged_files: Vec<String> = Vec::new();
+      let mut unstaged_files: Vec<String> = Vec::new();
+      let mut untracked_files: Vec<String> = Vec::new();
+
+      let stdout = String::from_utf8_lossy(&output.stdout);
+      for line in stdout.lines() {
+        if line.trim().is_empty() {
+          continue;
+        }
+        if line.starts_with("??") {
+          untracked_files.push(line[3..].to_string());
+          continue;
+        }
+        let status = &line[..2];
+        let file = line[3..].to_string();
+        if status.contains('A') || status.contains('M') || status.contains('D') {
+          staged_files.push(file.clone());
+        }
+        if status.contains('M') || status.contains('D') {
+          unstaged_files.push(file.clone());
+        }
+      }
+
+      let has_changes =
+        !staged_files.is_empty() || !unstaged_files.is_empty() || !untracked_files.is_empty();
+
+      json!({
+        "success": true,
+        "status": {
+          "hasChanges": has_changes,
+          "stagedFiles": staged_files,
+          "unstagedFiles": unstaged_files,
+          "untrackedFiles": untracked_files,
+        }
+      })
+    },
+  )
+  .await
 }
 
 #[tauri::command]
-pub fn worktree_get_all(state: State<WorktreeState>) -> Value {
-  let guard = state.inner.lock().unwrap();
-  let worktrees: Vec<WorktreeInfo> = guard.values().cloned().collect();
-  json!({ "success": true, "worktrees": worktrees })
+pub async fn worktree_merge(app: AppHandle, args: WorktreeMergeArgs) -> Value {
+  run_blocking(
+    json!({ "success": false, "error": "Task cancelled" }),
+    move || {
+      let state: State<WorktreeState> = app.state();
+      let project_path = args.project_path.trim();
+      if project_path.is_empty() {
+        return json!({ "success": false, "error": "projectPath is required" });
+      }
+
+      let guard = state.inner.lock().unwrap();
+      let worktree = match guard.get(&args.worktree_id) {
+        Some(wt) => wt.clone(),
+        None => return json!({ "success": false, "error": "Worktree not found" }),
+      };
+      drop(guard);
+
+      let project_path_buf = PathBuf::from(project_path);
+      let default_branch = get_default_branch(&project_path_buf);
+      if let Err(err) = run_command("git", &["checkout", &default_branch], Some(&project_path_buf)) {
+        return json!({ "success": false, "error": err });
+      }
+      if let Err(err) = run_command("git", &["merge", &worktree.branch], Some(&project_path_buf)) {
+        return json!({ "success": false, "error": err });
+      }
+
+      let _ = worktree_remove_internal(
+        &state,
+        WorktreeRemoveArgs {
+          project_path: project_path.to_string(),
+          worktree_id: worktree.id.clone(),
+          worktree_path: Some(worktree.path.clone()),
+          branch: Some(worktree.branch.clone()),
+        },
+      );
+
+      json!({ "success": true })
+    },
+  )
+  .await
+}
+
+#[tauri::command]
+pub async fn worktree_get(app: AppHandle, args: WorktreeGetArgs) -> Value {
+  run_blocking(
+    json!({ "success": false, "error": "Task cancelled" }),
+    move || {
+      let state: State<WorktreeState> = app.state();
+      let guard = state.inner.lock().unwrap();
+      match guard.get(&args.worktree_id) {
+        Some(wt) => json!({ "success": true, "worktree": wt }),
+        None => json!({ "success": false, "error": "Worktree not found" }),
+      }
+    },
+  )
+  .await
+}
+
+#[tauri::command]
+pub async fn worktree_get_all(app: AppHandle) -> Value {
+  run_blocking(
+    json!({ "success": false, "error": "Task cancelled" }),
+    move || {
+      let state: State<WorktreeState> = app.state();
+      let guard = state.inner.lock().unwrap();
+      let worktrees: Vec<WorktreeInfo> = guard.values().cloned().collect();
+      json!({ "success": true, "worktrees": worktrees })
+    },
+  )
+  .await
 }
 
 pub fn create_worktree_from_branch(
@@ -930,33 +977,37 @@ pub fn create_worktree_from_branch(
 }
 
 #[tauri::command]
-pub fn project_settings_fetch_base_ref(
-  db_state: State<DbState>,
-  args: FetchBaseRefArgs,
-) -> Value {
-  let project_id = args.project_id.trim();
-  let project_path = args.project_path.trim();
-  if project_id.is_empty() || project_path.is_empty() {
-    return json!({ "success": false, "error": "projectId and projectPath are required" });
-  }
+pub async fn project_settings_fetch_base_ref(app: AppHandle, args: FetchBaseRefArgs) -> Value {
+  run_blocking(
+    json!({ "success": false, "error": "Task cancelled" }),
+    move || {
+      let db_state: State<DbState> = app.state();
+      let project_id = args.project_id.trim();
+      let project_path = args.project_path.trim();
+      if project_id.is_empty() || project_path.is_empty() {
+        return json!({ "success": false, "error": "projectId and projectPath are required" });
+      }
 
-  let row = match db::project_settings_row(&db_state, project_id) {
-    Ok(row) => row,
-    Err(err) => return json!({ "success": false, "error": err }),
-  };
+      let row = match db::project_settings_row(&db_state, project_id) {
+        Ok(row) => row,
+        Err(err) => return json!({ "success": false, "error": err }),
+      };
 
-  let base_ref = match resolve_project_base_ref(Path::new(project_path), &row) {
-    Ok(info) => info,
-    Err(err) => return json!({ "success": false, "error": err }),
-  };
+      let base_ref = match resolve_project_base_ref(Path::new(project_path), &row) {
+        Ok(info) => info,
+        Err(err) => return json!({ "success": false, "error": err }),
+      };
 
-  match fetch_base_ref_with_fallback(Path::new(project_path), project_id, &base_ref, &db_state) {
-    Ok(info) => json!({
-      "success": true,
-      "baseRef": info.full_ref,
-      "remote": info.remote,
-      "branch": info.branch,
-    }),
-    Err(err) => json!({ "success": false, "error": err }),
-  }
+      match fetch_base_ref_with_fallback(Path::new(project_path), project_id, &base_ref, &db_state) {
+        Ok(info) => json!({
+          "success": true,
+          "baseRef": info.full_ref,
+          "remote": info.remote,
+          "branch": info.branch,
+        }),
+        Err(err) => json!({ "success": false, "error": err }),
+      }
+    },
+  )
+  .await
 }

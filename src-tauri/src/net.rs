@@ -1,5 +1,6 @@
 use serde::Deserialize;
 use serde_json::json;
+use crate::runtime::run_blocking;
 use std::net::{TcpStream, ToSocketAddrs};
 use std::time::Duration;
 
@@ -28,21 +29,24 @@ pub struct NetProbeArgs {
 }
 
 #[tauri::command]
-pub fn net_probe_ports(args: NetProbeArgs) -> serde_json::Value {
-  let h = args.host.trim();
-  let host = if h.is_empty() { "localhost" } else { h };
-  let timeout = args.timeout_ms.unwrap_or(800).max(1);
+pub async fn net_probe_ports(args: NetProbeArgs) -> serde_json::Value {
+  run_blocking(json!({ "reachable": [] }), move || {
+    let h = args.host.trim();
+    let host = if h.is_empty() { "localhost" } else { h };
+    let timeout = args.timeout_ms.unwrap_or(800).max(1);
 
-  let mut reachable: Vec<u16> = Vec::new();
-  for port in args.ports {
-    if port <= 0 || port > 65535 {
-      continue;
+    let mut reachable: Vec<u16> = Vec::new();
+    for port in args.ports {
+      if port <= 0 || port > 65535 {
+        continue;
+      }
+      let port_u16 = port as u16;
+      if probe_port(host, port_u16, timeout) {
+        reachable.push(port_u16);
+      }
     }
-    let port_u16 = port as u16;
-    if probe_port(host, port_u16, timeout) {
-      reachable.push(port_u16);
-    }
-  }
 
-  json!({ "reachable": reachable })
+    json!({ "reachable": reachable })
+  })
+  .await
 }

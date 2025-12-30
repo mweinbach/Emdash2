@@ -14,6 +14,7 @@ mod net;
 mod plan_lock;
 mod pty;
 mod providers;
+mod runtime;
 mod settings;
 mod storage;
 mod terminal_snapshots;

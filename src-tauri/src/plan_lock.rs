@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use crate::runtime::run_blocking;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -194,25 +195,37 @@ pub struct PlanLockArgs {
 }
 
 #[tauri::command]
-pub fn plan_lock(args: PlanLockArgs) -> serde_json::Value {
-  let root = Path::new(args.task_path.trim());
-  if args.task_path.trim().is_empty() {
-    return json!({ "success": false, "changed": 0, "error": "taskPath is required" });
-  }
-  match apply_lock(root) {
-    Ok(changed) => json!({ "success": true, "changed": changed }),
-    Err(err) => json!({ "success": false, "changed": 0, "error": err }),
-  }
+pub async fn plan_lock(args: PlanLockArgs) -> serde_json::Value {
+  run_blocking(
+    json!({ "success": false, "changed": 0, "error": "Task cancelled" }),
+    move || {
+      let root = Path::new(args.task_path.trim());
+      if args.task_path.trim().is_empty() {
+        return json!({ "success": false, "changed": 0, "error": "taskPath is required" });
+      }
+      match apply_lock(root) {
+        Ok(changed) => json!({ "success": true, "changed": changed }),
+        Err(err) => json!({ "success": false, "changed": 0, "error": err }),
+      }
+    },
+  )
+  .await
 }
 
 #[tauri::command]
-pub fn plan_unlock(args: PlanLockArgs) -> serde_json::Value {
-  if args.task_path.trim().is_empty() {
-    return json!({ "success": false, "restored": 0, "error": "taskPath is required" });
-  }
-  let root = Path::new(args.task_path.trim());
-  match release_lock(root) {
-    Ok(restored) => json!({ "success": true, "restored": restored }),
-    Err(err) => json!({ "success": false, "restored": 0, "error": err }),
-  }
+pub async fn plan_unlock(args: PlanLockArgs) -> serde_json::Value {
+  run_blocking(
+    json!({ "success": false, "restored": 0, "error": "Task cancelled" }),
+    move || {
+      if args.task_path.trim().is_empty() {
+        return json!({ "success": false, "restored": 0, "error": "taskPath is required" });
+      }
+      let root = Path::new(args.task_path.trim());
+      match release_lock(root) {
+        Ok(restored) => json!({ "success": true, "restored": restored }),
+        Err(err) => json!({ "success": false, "restored": 0, "error": err }),
+      }
+    },
+  )
+  .await
 }
