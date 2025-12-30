@@ -290,35 +290,6 @@ fn resolve_real_path(path: &Path) -> PathBuf {
   fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
-fn parse_numstat(output: &str) -> (i64, i64) {
-  let mut additions = 0;
-  let mut deletions = 0;
-  for line in output.lines() {
-    let line = line.trim();
-    if line.is_empty() {
-      continue;
-    }
-    let mut parts = line.split('\t');
-    let add_str = parts.next();
-    let del_str = parts.next();
-    if let (Some(add_str), Some(del_str)) = (add_str, del_str) {
-      let add = if add_str == "-" {
-        0
-      } else {
-        add_str.parse::<i64>().unwrap_or(0)
-      };
-      let del = if del_str == "-" {
-        0
-      } else {
-        del_str.parse::<i64>().unwrap_or(0)
-      };
-      additions += add;
-      deletions += del;
-    }
-  }
-  (additions, deletions)
-}
-
 fn normalize_git_path(raw: &str) -> String {
   let trimmed = raw.trim();
   if trimmed.is_empty() {
