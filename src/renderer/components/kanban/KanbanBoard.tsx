@@ -13,6 +13,7 @@ import {
 } from '../../lib/taskStatus';
 import { activityStore } from '../../lib/activityStore';
 import { refreshPrStatus } from '../../lib/prStatusStore';
+import { subscribeGitStatus } from '../../lib/gitStatusStore';
 
 const order: KanbanStatus[] = ['todo', 'in-progress', 'done'];
 const titles: Record<KanbanStatus, string> = {
@@ -109,52 +110,56 @@ const KanbanBoard: React.FC<{
 
   // Promote any task with local changes directly to "Ready for review" (done)
   React.useEffect(() => {
-    let cancelled = false;
     const wsList = project.tasks || [];
-    const check = async () => {
-      for (const ws of wsList) {
-        const variantPaths: string[] = (() => {
-          try {
-            const v = ws?.metadata?.multiAgent?.variants || [];
-            if (Array.isArray(v)) return v.map((x: any) => String(x?.path || '')).filter(Boolean);
-          } catch {}
-          return [];
-        })();
-        const paths = [ws.path, ...variantPaths].filter((p, i, arr) => p && arr.indexOf(p) === i);
-        if (paths.length === 0) continue;
-        try {
-          let hasChanges = false;
-          for (const p of paths) {
-            const res = await (window as any).electronAPI?.getGitStatus?.(p);
-            if (res?.success && Array.isArray(res?.changes) && res.changes.length > 0) {
-              hasChanges = true;
-              break;
-            }
-          }
-          if (hasChanges && !cancelled) {
-            // Do not auto-complete while busy
-            let currentlyBusy = false;
-            const un = activityStore.subscribe(ws.id, (b) => {
-              currentlyBusy = b;
-            });
-            un?.();
-            if (currentlyBusy) continue;
-            setStatusMap((prev) => {
-              if (prev[ws.id] === 'done') return prev;
-              setStatus(ws.id, 'done');
-              return { ...prev, [ws.id]: 'done' };
-            });
-          }
-        } catch {
-          // ignore per-task errors
-        }
-      }
+    const offs: Array<() => void> = [];
+
+    const maybePromote = (ws: Task, hasChanges: boolean) => {
+      if (!hasChanges) return;
+      let currentlyBusy = false;
+      const un = activityStore.subscribe(ws.id, (b) => {
+        currentlyBusy = b;
+      });
+      un?.();
+      if (currentlyBusy) return;
+      setStatusMap((prev) => {
+        if (prev[ws.id] === 'done') return prev;
+        setStatus(ws.id, 'done');
+        return { ...prev, [ws.id]: 'done' };
+      });
     };
-    check();
-    const id = window.setInterval(check, 10000);
+
+    for (const ws of wsList) {
+      const variantPaths: string[] = (() => {
+        try {
+          const v = ws?.metadata?.multiAgent?.variants || [];
+          if (Array.isArray(v)) return v.map((x: any) => String(x?.path || '')).filter(Boolean);
+        } catch {}
+        return [];
+      })();
+      const paths = [ws.path, ...variantPaths].filter((p, i, arr) => p && arr.indexOf(p) === i);
+      if (paths.length === 0) continue;
+
+      for (const path of paths) {
+        offs.push(
+          subscribeGitStatus(
+            path,
+            (res) => {
+              if (!res?.success || !Array.isArray(res?.changes)) return;
+              const filtered = res.changes.filter(
+                (c) =>
+                  !String(c?.path || '').startsWith('.emdash/') &&
+                  String(c?.path || '') !== 'PLANNING.md'
+              );
+              maybePromote(ws, filtered.length > 0);
+            },
+            { intervalMs: 10_000 }
+          )
+        );
+      }
+    }
+
     return () => {
-      cancelled = true;
-      window.clearInterval(id);
+      offs.forEach((off) => off());
     };
   }, [project.id, project.tasks?.length]);
 

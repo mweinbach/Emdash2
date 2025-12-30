@@ -1,7 +1,6 @@
 import React from 'react';
 import { cn } from '@/lib/utils';
 import FileChangesPanel from './FileChangesPanel';
-import { useFileChanges } from '@/hooks/useFileChanges';
 import TaskTerminalPanel from './TaskTerminalPanel';
 import { useRightSidebar } from './ui/right-sidebar';
 import { providerAssets } from '@/providers/assets';
@@ -27,12 +26,24 @@ const RightSidebar: React.FC<RightSidebarProps> = ({ task, projectPath, classNam
   const { collapsed } = useRightSidebar();
 
   // Detect multi-agent variants in task metadata
-  const variants: Array<{ provider: Provider; name: string; path: string }> = (() => {
+  const variants: Array<{
+    provider: Provider;
+    name: string;
+    path: string;
+    branch?: string;
+    worktreeId?: string;
+  }> = (() => {
     try {
       const v = task?.metadata?.multiAgent?.variants || [];
       if (Array.isArray(v))
         return v
-          .map((x: any) => ({ provider: x?.provider as Provider, name: x?.name, path: x?.path }))
+          .map((x: any) => ({
+            provider: x?.provider as Provider,
+            name: x?.name,
+            path: x?.path,
+            branch: x?.branch,
+            worktreeId: x?.worktreeId,
+          }))
           .filter((x) => x?.path);
     } catch {}
     return [];
@@ -78,41 +89,32 @@ const RightSidebar: React.FC<RightSidebarProps> = ({ task, projectPath, classNam
           <div className="flex h-full flex-col">
             {task && variants.length > 1 ? (
               <div className="min-h-0 flex-1 overflow-y-auto">
-                {variants.map((v, i) => (
-                  <div
-                    key={`${v.provider}-${i}`}
-                    className="mb-2 border-b border-border last:mb-0 last:border-b-0"
-                  >
-                    <div className="flex min-w-0 items-center justify-between bg-gray-50 px-3 py-2 text-xs font-medium text-foreground dark:bg-gray-900">
-                      <span className="inline-flex min-w-0 items-center gap-2">
-                        {(() => {
-                          const asset = (providerAssets as any)[v.provider] as
-                            | { logo: string; alt: string; name: string; invertInDark?: boolean }
-                            | undefined;
-                          const meta = (providerMeta as any)[v.provider] as
-                            | { label?: string }
-                            | undefined;
-                          return (
-                            <span className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-border/70 bg-muted/40 px-2 py-0.5 text-[10px] font-medium">
-                              {asset?.logo ? (
-                                <img
-                                  src={asset.logo}
-                                  alt={asset.alt || meta?.label || String(v.provider)}
-                                  className={`h-3.5 w-3.5 object-contain ${asset?.invertInDark ? 'dark:invert' : ''}`}
-                                />
-                              ) : null}
-                              {getVariantDisplayLabel(v)}
-                            </span>
-                          );
-                        })()}
-                        <span className="truncate" title={v.name}>
-                          {v.name}
-                        </span>
-                      </span>
+                {variants.map((v, i) => {
+                  const asset = (providerAssets as any)[v.provider] as
+                    | { logo: string; alt?: string; name?: string; invertInDark?: boolean }
+                    | undefined;
+                  const meta = (providerMeta as any)[v.provider] as { label?: string } | undefined;
+                  return (
+                    <div
+                      key={`${v.provider}-${i}`}
+                      className="mb-2 border-b border-border last:mb-0 last:border-b-0"
+                    >
+                      <FileChangesPanel
+                        taskId={v.path}
+                        title={getVariantDisplayLabel(v)}
+                        subtitle={v.branch || v.name}
+                        logoSrc={asset?.logo}
+                        logoAlt={asset?.alt || meta?.label || asset?.name || String(v.provider)}
+                        logoInvert={Boolean(asset?.invertInDark)}
+                        activityId={v.worktreeId ? `${v.worktreeId}-main` : undefined}
+                        activityProvider={v.provider}
+                        className="min-h-0"
+                        collapsible
+                        defaultCollapsed
+                      />
                     </div>
-                    <VariantChangesIfAny path={v.path} />
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : task && variants.length === 1 ? (
               (() => {
@@ -122,11 +124,25 @@ const RightSidebar: React.FC<RightSidebarProps> = ({ task, projectPath, classNam
                   path: v.path,
                   name: v.name || task.name,
                 } as any;
+                const asset = (providerAssets as any)[v.provider] as
+                  | { logo: string; alt?: string; name?: string; invertInDark?: boolean }
+                  | undefined;
+                const meta = (providerMeta as any)[v.provider] as
+                  | { label?: string }
+                  | undefined;
                 return (
                   <>
-                    <VariantChangesIfAny
-                      path={v.path}
+                    <FileChangesPanel
+                      taskId={v.path}
+                      title={getVariantDisplayLabel(v)}
+                      subtitle={v.branch || v.name}
+                      logoSrc={asset?.logo}
+                      logoAlt={asset?.alt || meta?.label || asset?.name || String(v.provider)}
+                      logoInvert={Boolean(asset?.invertInDark)}
+                      activityId={v.worktreeId ? `${v.worktreeId}-main` : undefined}
+                      activityProvider={v.provider}
                       className="min-h-0 flex-1 border-b border-border"
+                      collapsible={false}
                     />
                     <TaskTerminalPanel
                       task={derived}
@@ -141,6 +157,8 @@ const RightSidebar: React.FC<RightSidebarProps> = ({ task, projectPath, classNam
               <>
                 <FileChangesPanel
                   taskId={task.path}
+                  activityId={task.agentId ? `${task.agentId}-main-${task.id}` : undefined}
+                  activityProvider={task.agentId}
                   className="min-h-0 flex-1 border-b border-border"
                 />
                 <TaskTerminalPanel
@@ -201,12 +219,3 @@ const RightSidebar: React.FC<RightSidebarProps> = ({ task, projectPath, classNam
 };
 
 export default RightSidebar;
-
-const VariantChangesIfAny: React.FC<{ path: string; className?: string }> = ({
-  path,
-  className,
-}) => {
-  const { fileChanges } = useFileChanges(path);
-  if (!fileChanges || fileChanges.length === 0) return null;
-  return <FileChangesPanel taskId={path} className={className || 'min-h-0'} />;
-};

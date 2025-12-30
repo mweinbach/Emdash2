@@ -50,6 +50,7 @@ export class TerminalSessionManager {
   private readonly exitListeners = new Set<
     (info: { exitCode: number | undefined; signal?: number }) => void
   >();
+  private pendingOscFragment = '';
   private ptyStarted = false;
   private lastSnapshotAt: number | null = null;
   private lastSnapshotReason: 'interval' | 'detach' | 'dispose' | null = null;
@@ -488,7 +489,10 @@ export class TerminalSessionManager {
         this.terminal.clear();
         this.terminal.writeln('[scrollback truncated to protect memory]');
       }
-      this.terminal.write(chunk);
+      const filtered = this.filterUnsupportedOsc(chunk);
+      if (filtered) {
+        this.terminal.write(filtered);
+      }
       // Auto-scroll to bottom when new data arrives
       // This ensures users always see the latest output, especially when the agent is waiting for input
       try {
@@ -517,6 +521,56 @@ export class TerminalSessionManager {
     if (!PROVIDER_IDS.includes(providerId)) return false;
     const provider = PROVIDERS.find((p) => p.id === providerId);
     return provider?.resumeFlag !== undefined;
+  }
+
+  private filterUnsupportedOsc(chunk: string): string {
+    if (!chunk) return '';
+    let data = this.pendingOscFragment
+      ? `${this.pendingOscFragment}${chunk}`
+      : chunk;
+    this.pendingOscFragment = '';
+    if (!data.includes('\x1b]')) return data;
+
+    let out = '';
+    let index = 0;
+    while (index < data.length) {
+      const start = data.indexOf('\x1b]', index);
+      if (start === -1) {
+        out += data.slice(index);
+        break;
+      }
+
+      out += data.slice(index, start);
+
+      const searchFrom = start + 2;
+      const bel = data.indexOf('\x07', searchFrom);
+      const st = data.indexOf('\x1b\\', searchFrom);
+      if (bel === -1 && st === -1) {
+        this.pendingOscFragment = data.slice(start);
+        break;
+      }
+
+      let end = bel;
+      let termLen = 1;
+      if (st !== -1 && (bel === -1 || st < bel)) {
+        end = st;
+        termLen = 2;
+      }
+
+      const body = data.slice(searchFrom, end);
+      const cmdMatch = /^(\d{1,3})/.exec(body);
+      const cmd = cmdMatch ? Number.parseInt(cmdMatch[1], 10) : null;
+
+      if (cmd !== null && cmd >= 10 && cmd <= 19) {
+        // Drop OSC color queries/sets; ghostty-web logs warnings without allocator support.
+      } else {
+        out += data.slice(start, end + termLen);
+      }
+
+      index = end + termLen;
+    }
+
+    return out;
   }
 
   private async restoreSnapshot(): Promise<void> {
@@ -550,7 +604,10 @@ export class TerminalSessionManager {
 
       if (typeof snapshot.data === 'string' && snapshot.data.length > 0) {
         this.terminal.reset();
-        this.terminal.write(snapshot.data);
+      const filtered = this.filterUnsupportedOsc(snapshot.data);
+      if (filtered) {
+        this.terminal.write(filtered);
+      }
       }
       if (snapshot.cols && snapshot.rows) {
         this.terminal.resize(snapshot.cols, snapshot.rows);

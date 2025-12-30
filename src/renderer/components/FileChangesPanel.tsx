@@ -8,16 +8,39 @@ import ChangesDiffModal from './ChangesDiffModal';
 import AllChangesDiffModal from './AllChangesDiffModal';
 import { useFileChanges } from '../hooks/useFileChanges';
 import { usePrStatus } from '../hooks/usePrStatus';
+import { usePtyBusy } from '../hooks/usePtyBusy';
 import FileTypeIcon from './ui/file-type-icon';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
-import { Plus, Undo2, ArrowUpRight, FileDiff } from 'lucide-react';
+import { Plus, Undo2, ArrowUpRight, FileDiff, ChevronDown } from 'lucide-react';
 
 interface FileChangesPanelProps {
   taskId: string;
   className?: string;
+  title?: string;
+  subtitle?: string;
+  logoSrc?: string;
+  logoAlt?: string;
+  logoInvert?: boolean;
+  activityId?: string;
+  activityProvider?: string;
+  collapsible?: boolean;
+  defaultCollapsed?: boolean;
 }
 
-const FileChangesPanelComponent: React.FC<FileChangesPanelProps> = ({ taskId, className }) => {
+const FileChangesPanelComponent: React.FC<FileChangesPanelProps> = ({
+  taskId,
+  className,
+  title,
+  subtitle,
+  logoSrc,
+  logoAlt,
+  logoInvert = false,
+  activityId,
+  activityProvider,
+  collapsible = false,
+  defaultCollapsed = false,
+}) => {
+  const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
   const [showDiffModal, setShowDiffModal] = useState(false);
   const [showAllChangesModal, setShowAllChangesModal] = useState(false);
   const [selectedPath, setSelectedPath] = useState<string | undefined>(undefined);
@@ -30,15 +53,19 @@ const FileChangesPanelComponent: React.FC<FileChangesPanelProps> = ({ taskId, cl
   const { toast } = useToast();
   const hasChanges = fileChanges.length > 0;
   const hasStagedChanges = fileChanges.some((change) => change.isStaged);
+  const isBusy = usePtyBusy(activityId, activityProvider);
   const { pr, refresh: refreshPr } = usePrStatus(taskId);
   const [branchAhead, setBranchAhead] = useState<number | null>(null);
   const [branchStatusLoading, setBranchStatusLoading] = useState<boolean>(false);
+  const stagedCount = fileChanges.filter((f) => f.isStaged).length;
+  const hasCommitsToPr = hasChanges || (branchAhead !== null && branchAhead > 0);
 
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
       if (!taskId || hasChanges) {
         setBranchAhead(null);
+        setBranchStatusLoading(false);
         return;
       }
       setBranchStatusLoading(true);
@@ -59,6 +86,10 @@ const FileChangesPanelComponent: React.FC<FileChangesPanelProps> = ({ taskId, cl
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [taskId, hasChanges]);
+
+  useEffect(() => {
+    setIsCollapsed(defaultCollapsed);
+  }, [taskId, defaultCollapsed]);
 
   const handleStageFile = async (filePath: string, event: React.MouseEvent) => {
     event.stopPropagation(); // Prevent opening diff modal
@@ -224,99 +255,92 @@ const FileChangesPanelComponent: React.FC<FileChangesPanelProps> = ({ taskId, cl
   return (
     <div className={`flex h-full flex-col bg-white shadow-sm dark:bg-gray-800 ${className}`}>
       <div className="bg-gray-50 px-3 py-2 dark:bg-gray-900">
-        {hasChanges ? (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
-                <span className="truncate text-sm font-medium text-gray-900 dark:text-gray-100">
-                  {fileChanges.length} files changed
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="inline-flex min-w-0 items-center gap-1.5 rounded-md border border-border/70 bg-muted/40 px-2 py-0.5 text-[11px] font-semibold text-foreground">
+                {logoSrc ? (
+                  <img
+                    src={logoSrc}
+                    alt={logoAlt || title || 'Agent'}
+                    className={`h-3.5 w-3.5 object-contain ${logoInvert ? 'dark:invert' : ''}`}
+                  />
+                ) : null}
+                <span className="truncate">{title || 'Changes'}</span>
+              </span>
+              <div className="flex shrink-0 items-center gap-1 text-xs">
+                <span className="font-medium text-green-600 dark:text-green-400">
+                  +{totalChanges.additions}
                 </span>
-                <div className="flex shrink-0 items-center gap-1 text-xs">
-                  <span className="font-medium text-green-600 dark:text-green-400">
-                    +{totalChanges.additions}
-                  </span>
-                  <span className="text-gray-400">•</span>
-                  <span className="font-medium text-red-600 dark:text-red-400">
-                    -{totalChanges.deletions}
-                  </span>
-                </div>
-                {hasStagedChanges && (
-                  <span className="shrink-0 rounded bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-800 dark:bg-gray-900/30 dark:text-gray-300">
-                    {fileChanges.filter((f) => f.isStaged).length} staged
-                  </span>
-                )}
+                <span className="text-gray-400">•</span>
+                <span className="font-medium text-red-600 dark:text-red-400">
+                  -{totalChanges.deletions}
+                </span>
               </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 shrink-0 border-gray-200 px-2 text-xs text-gray-700 dark:border-gray-700 dark:text-gray-200"
-                  title="View all changes in a single scrollable view"
-                  onClick={() => setShowAllChangesModal(true)}
-                >
-                  <FileDiff className="h-3.5 w-3.5 sm:mr-1.5" />
-                  <span className="hidden sm:inline">Check Changes</span>
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 shrink-0 border-gray-200 px-2 text-xs text-gray-700 dark:border-gray-700 dark:text-gray-200"
-                  disabled={isCreatingPR}
-                  title="Commit all changes and create a pull request"
-                  onClick={async () => {
-                    void (async () => {
-                      const { captureTelemetry } = await import('../lib/telemetryClient');
-                      captureTelemetry('pr_viewed');
-                    })();
-                    await createPR({
-                      taskPath: taskId,
-                      onSuccess: async () => {
-                        await refreshChanges();
-                        try {
-                          await refreshPr();
-                        } catch {}
-                      },
-                    });
-                  }}
-                >
-                  {isCreatingPR ? <Spinner size="sm" /> : 'Create PR'}
-                </Button>
-              </div>
-            </div>
-
-            {hasStagedChanges && (
-              <div className="flex items-center space-x-2">
-                <Input
-                  placeholder="Enter commit message..."
-                  value={commitMessage}
-                  onChange={(e) => setCommitMessage(e.target.value)}
-                  className="h-8 flex-1 text-sm"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      handleCommitAndPush();
-                    }
-                  }}
-                />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 border-gray-200 px-2 text-xs text-gray-700 dark:border-gray-700 dark:text-gray-200"
-                  title="Commit all staged changes and push the branch"
-                  onClick={handleCommitAndPush}
-                  disabled={isCommitting || !commitMessage.trim()}
-                >
-                  {isCommitting ? <Spinner size="sm" /> : 'Commit & Push'}
-                </Button>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="flex w-full items-center justify-between">
-            <div className="flex items-center gap-2 p-2">
-              <span className="text-sm font-medium text-gray-900 dark:text-gray-100">Changes</span>
             </div>
             <div className="flex items-center gap-2">
+              {activityId ? (
+                <span
+                  className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium ${
+                    isBusy
+                      ? 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200'
+                      : 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-200'
+                  }`}
+                >
+                  <span
+                    className={`h-1.5 w-1.5 rounded-full ${
+                      isBusy ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'
+                    }`}
+                  />
+                  {isBusy ? 'Working' : 'Idle'}
+                </span>
+              ) : null}
+              {collapsible ? (
+                <button
+                  type="button"
+                  onClick={() => setIsCollapsed((prev) => !prev)}
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-transparent text-gray-500 transition hover:border-gray-200 hover:bg-gray-100 hover:text-gray-800 dark:text-gray-400 dark:hover:border-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+                  aria-label={isCollapsed ? 'Expand changes' : 'Collapse changes'}
+                  aria-expanded={!isCollapsed}
+                >
+                  <ChevronDown
+                    className={`h-4 w-4 transition-transform ${
+                      isCollapsed ? '-rotate-90' : 'rotate-0'
+                    }`}
+                  />
+                </button>
+              ) : null}
+            </div>
+          </div>
+
+          {subtitle ? (
+            <div className="flex min-w-0 items-center">
+              <span className="truncate text-xs text-gray-500 dark:text-gray-400">{subtitle}</span>
+            </div>
+          ) : null}
+
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
+              <span className="truncate text-sm font-medium text-gray-900 dark:text-gray-100">
+                {fileChanges.length} files changed
+              </span>
+              {hasStagedChanges && (
+                <span className="shrink-0 rounded bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-800 dark:bg-gray-900/30 dark:text-gray-300">
+                  {stagedCount} staged
+                </span>
+              )}
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 shrink-0 border-gray-200 px-2 text-xs text-gray-700 dark:border-gray-700 dark:text-gray-200"
+                title="View all changes in a single scrollable view"
+                onClick={() => setShowAllChangesModal(true)}
+              >
+                <FileDiff className="h-3.5 w-3.5 sm:mr-1.5" />
+                <span className="hidden sm:inline">Check Changes</span>
+              </Button>
               {pr ? (
                 <button
                   type="button"
@@ -334,13 +358,17 @@ const FileChangesPanelComponent: React.FC<FileChangesPanelProps> = ({ taskId, cl
                       : `PR ${String(pr.state).charAt(0).toUpperCase() + String(pr.state).slice(1).toLowerCase()}`}
                   <ArrowUpRight className="size-3" />
                 </button>
-              ) : branchStatusLoading || (branchAhead !== null && branchAhead > 0) ? (
+              ) : (
                 <Button
                   variant="outline"
                   size="sm"
-                  className="h-8 border-gray-200 px-2 text-xs text-gray-700 dark:border-gray-700 dark:text-gray-200"
-                  disabled={isCreatingPR || branchStatusLoading}
-                  title="Create a pull request for the current branch"
+                  className="h-8 shrink-0 border-gray-200 px-2 text-xs text-gray-700 dark:border-gray-700 dark:text-gray-200"
+                  disabled={isCreatingPR || branchStatusLoading || !hasCommitsToPr}
+                  title={
+                    !hasCommitsToPr
+                      ? 'No commits ahead to open a PR'
+                      : 'Commit all changes and create a pull request'
+                  }
                   onClick={async () => {
                     void (async () => {
                       const { captureTelemetry } = await import('../lib/telemetryClient');
@@ -359,15 +387,41 @@ const FileChangesPanelComponent: React.FC<FileChangesPanelProps> = ({ taskId, cl
                 >
                   {isCreatingPR || branchStatusLoading ? <Spinner size="sm" /> : 'Create PR'}
                 </Button>
-              ) : (
-                <span className="text-xs text-gray-500">No PR for this branch</span>
               )}
             </div>
           </div>
-        )}
+
+          {!isCollapsed && hasStagedChanges && (
+            <div className="flex items-center space-x-2">
+              <Input
+                placeholder="Enter commit message..."
+                value={commitMessage}
+                onChange={(e) => setCommitMessage(e.target.value)}
+                className="h-8 flex-1 text-sm"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleCommitAndPush();
+                  }
+                }}
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 border-gray-200 px-2 text-xs text-gray-700 dark:border-gray-700 dark:text-gray-200"
+                title="Commit all staged changes and push the branch"
+                onClick={handleCommitAndPush}
+                disabled={isCommitting || !commitMessage.trim()}
+              >
+                {isCommitting ? <Spinner size="sm" /> : 'Commit & Push'}
+              </Button>
+            </div>
+          )}
+        </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      {!isCollapsed && (
+        <div className="min-h-0 flex-1 overflow-y-auto">
         {fileChanges.map((change, index) => (
           <div
             key={index}
@@ -483,7 +537,8 @@ const FileChangesPanelComponent: React.FC<FileChangesPanelProps> = ({ taskId, cl
             </div>
           </div>
         ))}
-      </div>
+        </div>
+      )}
       {showDiffModal && (
         <ChangesDiffModal
           open={showDiffModal}

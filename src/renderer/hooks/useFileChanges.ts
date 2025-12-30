@@ -1,4 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import type { GitStatusResult } from '../lib/gitStatusStore';
+import { refreshGitStatus, subscribeGitStatus } from '../lib/gitStatusStore';
 
 export interface FileChange {
   path: string;
@@ -13,100 +15,61 @@ export function useFileChanges(taskPath: string) {
   const [fileChanges, setFileChanges] = useState<FileChange[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const awaitingRefresh = useRef(false);
 
   useEffect(() => {
-    const fetchFileChanges = async (isInitialLoad = false) => {
-      if (!taskPath) return;
+    if (!taskPath) {
+      setFileChanges([]);
+      setIsLoading(false);
+      setError('Missing task path');
+      return;
+    }
 
-      if (isInitialLoad) {
-        setIsLoading(true);
+    let cancelled = false;
+    setIsLoading(true);
+    setError(null);
+
+    const handleStatus = (result: GitStatusResult | null) => {
+      if (cancelled) return;
+      if (result?.success && result.changes && result.changes.length > 0) {
+        const changes: FileChange[] = result.changes
+          .map((change) => ({
+            path: change.path,
+            status: change.status as 'added' | 'modified' | 'deleted' | 'renamed',
+            additions: change.additions || 0,
+            deletions: change.deletions || 0,
+            isStaged: change.isStaged || false,
+            diff: change.diff,
+          }))
+          .filter((c) => !c.path.startsWith('.emdash/') && c.path !== 'PLANNING.md');
+        setFileChanges(changes);
         setError(null);
-      }
-
-      try {
-        // Call main process to get git status
-        const result = await window.electronAPI.getGitStatus(taskPath);
-
-        if (result?.success && result.changes && result.changes.length > 0) {
-          const changes: FileChange[] = result.changes
-            .map(
-              (change: {
-                path: string;
-                status: string;
-                additions: number;
-                deletions: number;
-                isStaged: boolean;
-                diff?: string;
-              }) => ({
-                path: change.path,
-                status: change.status as 'added' | 'modified' | 'deleted' | 'renamed',
-                additions: change.additions || 0,
-                deletions: change.deletions || 0,
-                isStaged: change.isStaged || false,
-                diff: change.diff,
-              })
-            )
-            .filter((c) => !c.path.startsWith('.emdash/') && c.path !== 'PLANNING.md');
-          setFileChanges(changes);
-        } else {
-          setFileChanges([]);
-        }
-      } catch (err) {
-        console.error('Failed to fetch file changes:', err);
-        if (isInitialLoad) {
-          setError('Failed to load file changes');
-        }
-        // No changes on error - set empty array
+      } else if (result?.success) {
         setFileChanges([]);
-      } finally {
-        if (isInitialLoad) {
-          setIsLoading(false);
-        }
+        setError(null);
+      } else {
+        setFileChanges([]);
+        setError(result?.error || 'Failed to load file changes');
       }
+      if (awaitingRefresh.current) {
+        awaitingRefresh.current = false;
+      }
+      setIsLoading(false);
     };
 
-    // Initial load with loading state
-    fetchFileChanges(true);
+    const unsubscribe = subscribeGitStatus(taskPath, handleStatus, { intervalMs: 5000 });
 
-    const interval = setInterval(() => fetchFileChanges(false), 5000);
-
-    return () => clearInterval(interval);
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
   }, [taskPath]);
 
   const refreshChanges = async () => {
+    if (!taskPath) return;
+    awaitingRefresh.current = true;
     setIsLoading(true);
-    try {
-      const result = await window.electronAPI.getGitStatus(taskPath);
-      if (result?.success && result.changes && result.changes.length > 0) {
-        const changes: FileChange[] = result.changes
-          .map(
-            (change: {
-              path: string;
-              status: string;
-              additions: number;
-              deletions: number;
-              isStaged: boolean;
-              diff?: string;
-            }) => ({
-              path: change.path,
-              status: change.status as 'added' | 'modified' | 'deleted' | 'renamed',
-              additions: change.additions || 0,
-              deletions: change.deletions || 0,
-              isStaged: change.isStaged || false,
-              diff: change.diff,
-            })
-          )
-          .filter((c) => !c.path.startsWith('.emdash/') && c.path !== 'PLANNING.md');
-        setFileChanges(changes);
-      } else {
-        setFileChanges([]);
-      }
-    } catch (err) {
-      console.error('Failed to refresh file changes:', err);
-      setFileChanges([]);
-    } finally {
-      setIsLoading(false);
-    }
+    await refreshGitStatus(taskPath, { force: true });
   };
 
   return {

@@ -1,8 +1,14 @@
 import { useEffect, useState } from 'react';
 import { activityStore } from '../lib/activityStore';
 
-export function useTaskBusy(taskId: string) {
+export function useTaskBusy(taskId?: string) {
   const [busy, setBusy] = useState(false);
-  useEffect(() => activityStore.subscribe(taskId, setBusy), [taskId]);
+  useEffect(() => {
+    if (!taskId) {
+      setBusy(false);
+      return;
+    }
+    return activityStore.subscribe(taskId, setBusy);
+  }, [taskId]);
   return busy;
 }
