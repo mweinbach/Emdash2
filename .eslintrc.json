@@ -17,14 +17,7 @@
     "prefer-const": "warn",
     "react-hooks/set-state-in-effect": "warn"
   },
-  "overrides": [
-    {
-      "files": ["src/main/**/*.ts", "src/main/**/*.tsx"],
-      "rules": {
-        "@typescript-eslint/no-var-requires": "off"
-      }
-    }
-  ],
+  "overrides": [],
   "env": {
     "browser": true,
     "es2020": true,

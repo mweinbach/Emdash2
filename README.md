@@ -24,10 +24,10 @@
 
 <br />
 
-# Emdash2 (Tauri/Rust fork)
+# Emdash (Tauri + Rust)
 
 > **Emdash2 is a fork of [generalaction/emdash](https://github.com/generalaction/emdash).**  
-> It keeps the Emdash product/UX, but the desktop shell is being migrated to **Tauri + Rust** (instead of Electron + TypeScript).
+> The desktop shell is now **Tauri + Rust**.
 
 **Run multiple coding agents in parallel**
 
@@ -174,23 +174,19 @@ Contributions welcome! See the [Contributing Guide](CONTRIBUTING.md) to get star
 </details>
 
 <details>
-<summary><b>I hit a native‑module crash (sqlite3 / node‑pty / keytar). What’s the fast fix?</b></summary>
+<summary><b>I hit a dev build crash. What’s the fast fix?</b></summary>
 
-> This usually happens after switching Node/Electron versions.
->
-> 1) Rebuild native modules:
->
-> ```bash
-> bun run rebuild
-> ```
->
-> 2) If that fails, clean and reinstall:
+> 1) Reinstall dependencies:
 >
 > ```bash
 > bun run reset
 > ```
 >
-> (Resets `node_modules`, reinstalls, and re‑builds Electron native deps.)
+> 2) Then rerun:
+>
+> ```bash
+> bun run dev
+> ```
 </details>
 
 <details>

@@ -63,7 +63,7 @@ describe('containerRuns renderer bridge', () => {
     resetContainerRunListeners();
   });
 
-  it('invokes electron bridge when starting a run and trims inputs', async () => {
+  it('invokes desktop bridge when starting a run and trims inputs', async () => {
     startRunMock.mockResolvedValue({ ok: true, runId: 'run-1', sourcePath: null });
 
     const result = await startContainerRun({

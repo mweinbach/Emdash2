@@ -222,7 +222,7 @@ export async function startContainerRun(args: StartRunArgs) {
   }
 
   if (!api || typeof api.startContainerRun !== 'function') {
-    throw new Error('Electron bridge not available: startContainerRun');
+    throw new Error('Desktop bridge not available: startContainerRun');
   }
   try {
     // Basic client-side trace for debugging

@@ -71,7 +71,7 @@ const warned = new Set<string>();
 
 const noopCleanup = () => {};
 
-const shouldInitTauri = typeof window !== 'undefined' && !(window as any).electronAPI;
+const shouldInitTauri = typeof window !== 'undefined' && !!(window as any).__TAURI__;
 const runtime =
   typeof window !== 'undefined' && (window as any).__TAURI__ ? 'tauri' : 'web';
 
@@ -187,6 +187,8 @@ export function installPlatformBridge() {
     netProbePorts: async () => ({ reachable: [] }),
     planLock: async () => ({ success: false, error: 'not implemented' }),
     planUnlock: async () => ({ success: false, error: 'not implemented' }),
+    planApplyLock: async () => ({ success: false, error: 'not implemented' }),
+    planReleaseLock: async () => ({ success: false, error: 'not implemented' }),
     debugAppendLog: async () => ({ success: false, error: 'not implemented' }),
     githubCheckCLIInstalled: async () => false,
     githubInstallCLI: async () => ({ success: false, error: 'not implemented' }),
@@ -740,6 +742,10 @@ export function installPlatformBridge() {
         (window as any).electronAPI.planLock = (taskPath: string) =>
           invoke('plan_lock', { taskPath });
         (window as any).electronAPI.planUnlock = (taskPath: string) =>
+          invoke('plan_unlock', { taskPath });
+        (window as any).electronAPI.planApplyLock = (taskPath: string) =>
+          invoke('plan_lock', { taskPath });
+        (window as any).electronAPI.planReleaseLock = (taskPath: string) =>
           invoke('plan_unlock', { taskPath });
         (window as any).electronAPI.debugAppendLog = (
           filePath: string,

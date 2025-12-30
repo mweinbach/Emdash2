@@ -191,11 +191,10 @@ fn load_app_config(app: &tauri::AppHandle) -> Option<AppConfig> {
   let mut candidates: Vec<PathBuf> = Vec::new();
   if let Ok(dir) = app.path().resource_dir() {
     candidates.push(dir.join("appConfig.json"));
-    candidates.push(dir.join("main").join("appConfig.json"));
   }
   if let Ok(cwd) = std::env::current_dir() {
-    candidates.push(cwd.join("src/main/appConfig.json"));
-    candidates.push(cwd.join("../src/main/appConfig.json"));
+    candidates.push(cwd.join("src-tauri/appConfig.json"));
+    candidates.push(cwd.join("../src-tauri/appConfig.json"));
   }
 
   for path in candidates {

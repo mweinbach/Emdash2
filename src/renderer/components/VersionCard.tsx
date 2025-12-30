@@ -54,7 +54,7 @@ const VersionCard: React.FC = () => {
 
         <div className="flex-1 space-y-1">
           <div className="flex items-baseline gap-2">
-            <span className="text-sm font-medium text-foreground">Electron</span>
+            <span className="text-sm font-medium text-foreground">Runtime</span>
             <code className="font-mono text-sm text-muted-foreground">{electronVersion}</code>
           </div>
           {platform && <p className="text-xs text-muted-foreground">Platform: {platform}</p>}

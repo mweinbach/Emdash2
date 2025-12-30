@@ -36,12 +36,12 @@ export function useCreatePR() {
 
     setIsCreating(true);
     try {
-      // Guard: ensure Electron bridge methods exist (prevents hard crashes in plain web builds)
+      // Guard: ensure desktop bridge methods exist (prevents hard crashes in plain web builds)
       const api: any = (window as any).electronAPI;
       if (!api?.gitCommitAndPush || !api?.createPullRequest) {
-        const msg = 'PR creation is only available in the Electron app. Start via "bun run d".';
+        const msg = 'PR creation is only available in the desktop app. Start via "bun run d".';
         toast({ title: 'Create PR Unavailable', description: msg, variant: 'destructive' });
-        return { success: false, error: 'Electron bridge unavailable' } as any;
+        return { success: false, error: 'Desktop bridge unavailable' } as any;
       }
 
       // Auto-generate PR title and description if not provided

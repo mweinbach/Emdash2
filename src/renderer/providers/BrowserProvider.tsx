@@ -186,7 +186,7 @@ export function useBrowser() {
 
 // An invisible singleton helper that lets BrowserPane register the webview ref
 const BrowserViewRefBinder: React.FC<{
-  refObj: React.MutableRefObject<Electron.WebviewTag | null>;
+  refObj: React.MutableRefObject<any>;
   onUrlChange: (u: string | null) => void;
 }> = ({ refObj, onUrlChange }) => {
   React.useEffect(() => {

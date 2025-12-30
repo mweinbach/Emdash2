@@ -9,7 +9,7 @@ type ProjectSettingsPayload = {
   baseRef?: string;
 };
 
-// Global type declarations for Electron API
+// Global type declarations for the desktop bridge API
 declare global {
   interface Window {
     electronAPI: {

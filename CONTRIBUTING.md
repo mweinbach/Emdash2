@@ -34,11 +34,11 @@ bun run dev
  bun run build
 ```
 
-Tip: During development, the renderer hot‑reloads. Changes to the Electron main process (files in `src/main`) require a restart of the dev app.
+Tip: During development, the renderer hot‑reloads. Changes to the Tauri core (files in `src-tauri/src`) require a restart of the dev app.
 
 ## Project Overview
 
-- `src/main/` – Electron main process, IPC handlers, services (Git, worktrees, Codex process manager, DB, etc.)
+- `src-tauri/src/` – Tauri commands, IPC handlers, services (Git, worktrees, DB, etc.)
 - `src/renderer/` – React UI (Vite), hooks, components
 - Local database – SQLite file created under the OS userData folder (see “Local DB” below)
 - Worktrees – Git worktrees are created outside your repo root in a sibling `worktrees/` folder
@@ -93,11 +93,11 @@ TypeScript + ESLint
 - Keep code type‑safe. Run `bun run type-check` before pushing.
 - Run `bun run lint` and address warnings where reasonable.
 
-Electron main (Node side)
+Tauri core (Rust side)
 
-- Prefer `execFile` over `exec` to avoid shell quoting issues.
-- Never write logs into Git worktrees. Stream logs belong in the Electron `userData` folder.
-- Be conservative with console logging; noisy logs reduce signal. Use clear prefixes.
+- Prefer `std::process::Command` with explicit args to avoid shell quoting issues.
+- Never write logs into Git worktrees. Stream logs belong in the app data directory.
+- Be conservative with logging; noisy logs reduce signal. Use clear prefixes.
 
 Git and worktrees
 
@@ -119,10 +119,10 @@ Renderer (React)
 
 Local DB (SQLite)
 
-- Location (Electron `app.getPath('userData')`):
+- Location (Tauri app data dir):
   - macOS: `~/Library/Application Support/emdash/emdash.db`
-  - Linux: `~/.config/emdash/emdash.db`
-  - Windows: `%APPDATA%\emdash\emdash.db`
+  - Linux: `~/.local/share/emdash/emdash.db`
+  - Windows: `%APPDATA%\\emdash\\emdash.db`
 - Reset: quit the app, delete the file, relaunch (the schema is recreated).
 
 ## Issue Reports and Feature Requests
