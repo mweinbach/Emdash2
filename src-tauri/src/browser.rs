@@ -192,12 +192,10 @@ pub fn browser_view_reload(app: AppHandle) -> Value {
 }
 
 #[tauri::command]
-pub fn browser_view_open_devtools(app: AppHandle) -> Value {
-  if let Some(webview) = get_webview(&app) {
-    #[cfg(debug_assertions)]
-    {
-      webview.open_devtools();
-    }
+pub fn browser_view_open_devtools(_app: AppHandle) -> Value {
+  #[cfg(debug_assertions)]
+  if let Some(webview) = get_webview(&_app) {
+    webview.open_devtools();
   }
   json!({ "ok": true })
 }
