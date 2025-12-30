@@ -1,3 +1,4 @@
+use chrono::Utc;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::fs;
@@ -11,6 +12,7 @@ use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::settings;
+use crate::worktree::{self, WorktreeCreateFromBranchArgs, WorktreeState};
 
 const CLIENT_ID: &str = "Ov23ligC35uHWopzCeWf";
 const SCOPES: &str = "repo read:user read:org";
@@ -80,6 +82,69 @@ fn run_command(command: &str, args: &[&str], cwd: Option<&Path>) -> Result<Strin
   } else {
     Err(String::from_utf8_lossy(&output.stderr).to_string())
   }
+}
+
+fn slugify(name: &str) -> String {
+  let mut out = String::new();
+  for ch in name.to_lowercase().chars() {
+    if ch.is_ascii_alphanumeric() {
+      out.push(ch);
+    } else {
+      out.push('-');
+    }
+  }
+  let mut cleaned = String::new();
+  let mut prev_dash = false;
+  for ch in out.chars() {
+    if ch == '-' {
+      if !prev_dash {
+        cleaned.push(ch);
+        prev_dash = true;
+      }
+    } else {
+      cleaned.push(ch);
+      prev_dash = false;
+    }
+  }
+  cleaned.trim_matches('-').to_string()
+}
+
+fn ensure_pull_request_branch(
+  project_path: &Path,
+  pr_number: i64,
+  branch_name: &str,
+) -> Result<String, String> {
+  let previous = run_command("git", &["rev-parse", "--abbrev-ref", "HEAD"], Some(project_path))
+    .ok()
+    .map(|s| s.trim().to_string());
+
+  let pr_str = pr_number.to_string();
+  let safe_branch = if branch_name.trim().is_empty() {
+    format!("pr/{}", pr_number)
+  } else {
+    branch_name.to_string()
+  };
+
+  run_command(
+    "gh",
+    &[
+      "pr",
+      "checkout",
+      pr_str.as_str(),
+      "--branch",
+      safe_branch.as_str(),
+      "--force",
+    ],
+    Some(project_path),
+  )?;
+
+  if let Some(prev) = previous {
+    if prev != safe_branch {
+      let _ = run_command("git", &["checkout", &prev], Some(project_path));
+    }
+  }
+
+  Ok(safe_branch)
 }
 
 fn gh_installed() -> bool {
@@ -677,6 +742,90 @@ pub fn github_list_pull_requests(project_path: String) -> Value {
   };
   let prs: Value = serde_json::from_str(&stdout).unwrap_or_else(|_| json!([]));
   json!({ "success": true, "prs": prs })
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GithubCreatePullRequestWorktreeArgs {
+  project_path: String,
+  project_id: String,
+  pr_number: i64,
+  pr_title: Option<String>,
+  task_name: Option<String>,
+  branch_name: Option<String>,
+}
+
+#[tauri::command]
+pub fn github_create_pull_request_worktree(
+  app: AppHandle,
+  worktree_state: tauri::State<WorktreeState>,
+  args: GithubCreatePullRequestWorktreeArgs,
+) -> Value {
+  let project_path = args.project_path.trim();
+  let project_id = args.project_id.trim();
+  if project_path.is_empty() || project_id.is_empty() || args.pr_number <= 0 {
+    return json!({ "success": false, "error": "Missing required parameters" });
+  }
+
+  let default_slug = slugify(
+    args
+      .pr_title
+      .as_deref()
+      .unwrap_or(&format!("pr-{}", args.pr_number)),
+  );
+  let task_name = args
+    .task_name
+    .as_deref()
+    .map(|name| name.trim())
+    .filter(|name| !name.is_empty())
+    .map(|name| name.to_string())
+    .unwrap_or_else(|| format!("pr-{}-{}", args.pr_number, default_slug));
+  let branch_name = args
+    .branch_name
+    .clone()
+    .unwrap_or_else(|| format!("pr/{}", args.pr_number));
+
+  if let Ok(existing) = worktree::list_worktrees_internal(&app, &worktree_state, project_path) {
+    if let Some(found) = existing.iter().find(|wt| wt.branch == branch_name) {
+      return json!({
+        "success": true,
+        "worktree": found,
+        "branchName": branch_name,
+        "taskName": found.name,
+      });
+    }
+  }
+
+  let project_path_buf = Path::new(project_path);
+  if let Err(err) = ensure_pull_request_branch(project_path_buf, args.pr_number, &branch_name) {
+    return json!({ "success": false, "error": err });
+  }
+
+  let worktrees_dir = Path::new(project_path).join("..").join("worktrees");
+  let slug = slugify(&task_name).trim().to_string();
+  let mut worktree_path = worktrees_dir.join(&slug);
+  if worktree_path.exists() {
+    worktree_path = worktrees_dir.join(format!("{}-{}", slug, Utc::now().timestamp_millis()));
+  }
+
+  match worktree::create_worktree_from_branch(
+    &worktree_state,
+    WorktreeCreateFromBranchArgs {
+      project_path: project_path.to_string(),
+      task_name: task_name.clone(),
+      branch_name: branch_name.clone(),
+      project_id: project_id.to_string(),
+      worktree_path: Some(worktree_path.to_string_lossy().to_string()),
+    },
+  ) {
+    Ok(worktree) => json!({
+      "success": true,
+      "worktree": worktree,
+      "branchName": branch_name,
+      "taskName": task_name,
+    }),
+    Err(err) => json!({ "success": false, "error": err }),
+  }
 }
 
 #[tauri::command]

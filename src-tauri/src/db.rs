@@ -18,6 +18,13 @@ pub struct DbState {
   disabled: bool,
 }
 
+#[derive(Clone)]
+pub struct ProjectSettingsRow {
+  pub git_remote: Option<String>,
+  pub git_branch: Option<String>,
+  pub base_ref: Option<String>,
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct GitInfoInput {
@@ -468,6 +475,70 @@ fn parse_metadata(raw: Option<String>) -> Value {
 
 fn lock_conn(state: &DbState) -> Result<std::sync::MutexGuard<'_, Option<Connection>>, String> {
   state.conn.lock().map_err(|_| "DB lock poisoned".to_string())
+}
+
+pub(crate) fn project_settings_row(
+  state: &DbState,
+  project_id: &str,
+) -> Result<ProjectSettingsRow, String> {
+  if state.disabled {
+    return Err("DB disabled".to_string());
+  }
+  let guard = lock_conn(state)?;
+  let conn = guard.as_ref().ok_or_else(|| "DB not initialized".to_string())?;
+  let row = conn
+    .query_row(
+      "SELECT git_remote, git_branch, base_ref FROM projects WHERE id = ?1 LIMIT 1",
+      params![project_id],
+      |row| {
+        Ok(ProjectSettingsRow {
+          git_remote: row.get(0)?,
+          git_branch: row.get(1)?,
+          base_ref: row.get(2)?,
+        })
+      },
+    )
+    .optional()
+    .map_err(|err| err.to_string())?;
+  row.ok_or_else(|| "Project not found".to_string())
+}
+
+pub(crate) fn update_project_base_ref(
+  state: &DbState,
+  project_id: &str,
+  base_ref: &str,
+) -> Result<(), String> {
+  if state.disabled {
+    return Err("DB disabled".to_string());
+  }
+  let guard = lock_conn(state)?;
+  let conn = guard.as_ref().ok_or_else(|| "DB not initialized".to_string())?;
+  let row = conn
+    .query_row(
+      "SELECT git_remote, git_branch FROM projects WHERE id = ?1 LIMIT 1",
+      params![project_id],
+      |row| Ok((row.get::<_, Option<String>>(0)?, row.get::<_, Option<String>>(1)?)),
+    )
+    .optional()
+    .map_err(|err| err.to_string())?;
+  let (git_remote, git_branch) = match row {
+    Some(data) => data,
+    None => return Err("Project not found".to_string()),
+  };
+
+  let normalized = compute_base_ref(
+    Some(base_ref),
+    git_remote.as_deref(),
+    git_branch.as_deref(),
+  );
+
+  conn
+    .execute(
+      "UPDATE projects SET base_ref = ?1, updated_at = CURRENT_TIMESTAMP WHERE id = ?2",
+      params![normalized, project_id],
+    )
+    .map_err(|err| err.to_string())?;
+  Ok(())
 }
 
 pub fn task_agent_id_for_path(state: &DbState, task_path: &str) -> Option<String> {

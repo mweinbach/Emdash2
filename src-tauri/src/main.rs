@@ -1,16 +1,25 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod db;
+mod browser;
+mod container;
+mod debug;
 mod fs;
 mod github;
 mod git;
 mod host_preview;
+mod jira;
+mod linear;
+mod net;
+mod plan_lock;
 mod pty;
 mod providers;
 mod settings;
 mod storage;
 mod terminal_snapshots;
 mod telemetry;
+mod update;
+mod worktree;
 
 use tauri::Manager;
 
@@ -32,6 +41,11 @@ fn app_get_platform() -> String {
   } else {
     "linux".to_string()
   }
+}
+
+#[tauri::command]
+fn app_get_electron_version() -> String {
+  format!("tauri-{}", tauri::VERSION)
 }
 
 #[tauri::command]
@@ -119,11 +133,16 @@ fn main() {
       app.manage(host_preview::HostPreviewState::new());
       app.manage(providers::ProviderState::new(&app.handle()));
       app.manage(pty::PtyState::default());
+      app.manage(worktree::WorktreeState::new());
+      app.manage(container::ContainerState::new());
+      app.manage(browser::BrowserViewState::new());
+      app.manage(update::UpdateState::new());
       Ok(())
     })
     .invoke_handler(tauri::generate_handler![
       app_get_version,
       app_get_platform,
+      app_get_electron_version,
       app_open_external,
       app_open_in,
       project_open,
@@ -153,6 +172,7 @@ fn main() {
       github::github_get_owners,
       github::github_validate_repo_name,
       github::github_create_new_project,
+      github::github_create_pull_request_worktree,
       git::git_get_info,
       git::git_get_status,
       git::git_get_file_diff,
@@ -169,6 +189,13 @@ fn main() {
       host_preview::host_preview_start,
       host_preview::host_preview_stop,
       host_preview::host_preview_stop_all,
+      worktree::worktree_create,
+      worktree::worktree_list,
+      worktree::worktree_remove,
+      worktree::worktree_status,
+      worktree::worktree_merge,
+      worktree::worktree_get,
+      worktree::worktree_get_all,
       db::db_get_projects,
       db::db_save_project,
       db::db_get_tasks,
@@ -183,17 +210,50 @@ fn main() {
       db::db_delete_conversation,
       db::project_settings_get,
       db::project_settings_update,
+      worktree::project_settings_fetch_base_ref,
       settings_get,
       settings_update,
       telemetry_get_status,
       telemetry_set_enabled,
       telemetry_set_onboarding_seen,
       telemetry_capture,
+      update::update_check,
+      update::update_download,
+      update::update_quit_and_install,
+      update::update_open_latest,
       fs::fs_list,
       fs::fs_read,
       fs::fs_write,
       fs::fs_remove,
-      fs::fs_save_attachment
+      fs::fs_save_attachment,
+      net::net_probe_ports,
+      plan_lock::plan_lock,
+      plan_lock::plan_unlock,
+      debug::debug_append_log,
+      linear::linear_save_token,
+      linear::linear_check_connection,
+      linear::linear_clear_token,
+      linear::linear_initial_fetch,
+      linear::linear_search_issues,
+      jira::jira_save_credentials,
+      jira::jira_clear_credentials,
+      jira::jira_check_connection,
+      jira::jira_initial_fetch,
+      jira::jira_search_issues,
+      container::container_load_config,
+      container::container_start_run,
+      container::container_stop_run,
+      container::container_inspect_run,
+      container::icons_resolve_service,
+      browser::browser_view_show,
+      browser::browser_view_hide,
+      browser::browser_view_set_bounds,
+      browser::browser_view_load_url,
+      browser::browser_view_go_back,
+      browser::browser_view_go_forward,
+      browser::browser_view_reload,
+      browser::browser_view_open_devtools,
+      browser::browser_view_clear
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

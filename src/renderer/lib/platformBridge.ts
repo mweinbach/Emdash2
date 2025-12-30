@@ -164,11 +164,30 @@ export function installPlatformBridge() {
     deleteConversation: async () => ({ success: false, error: 'not implemented' }),
     getProjectSettings: async () => ({ success: false, error: 'not implemented' }),
     updateProjectSettings: async () => ({ success: false, error: 'not implemented' }),
+    fetchProjectBaseRef: async () => ({ success: false, error: 'not implemented' }),
+    worktreeCreate: async () => ({ success: false, error: 'not implemented' }),
+    worktreeList: async () => ({ success: false, error: 'not implemented' }),
+    worktreeRemove: async () => ({ success: false, error: 'not implemented' }),
+    worktreeStatus: async () => ({ success: false, error: 'not implemented' }),
+    worktreeMerge: async () => ({ success: false, error: 'not implemented' }),
+    worktreeGet: async () => ({ success: false, error: 'not implemented' }),
+    worktreeGetAll: async () => ({ success: false, error: 'not implemented' }),
     fsList: async () => ({ success: false, error: 'not implemented' }),
     fsRead: async () => ({ success: false, error: 'not implemented' }),
     fsWriteFile: async () => ({ success: false, error: 'not implemented' }),
     fsRemove: async () => ({ success: false, error: 'not implemented' }),
     saveAttachment: async () => ({ success: false, error: 'not implemented' }),
+    loadContainerConfig: async () => ({ ok: false, error: 'not implemented' }),
+    startContainerRun: async () => ({ ok: false, error: 'not implemented' }),
+    stopContainerRun: async () => ({ ok: false, error: 'not implemented' }),
+    inspectContainerRun: async () => ({ ok: false, error: 'not implemented' }),
+    resolveServiceIcon: async () => ({ ok: false, error: 'not implemented' }),
+    onRunEvent: () => noopCleanup,
+    removeRunEventListeners: () => {},
+    netProbePorts: async () => ({ reachable: [] }),
+    planLock: async () => ({ success: false, error: 'not implemented' }),
+    planUnlock: async () => ({ success: false, error: 'not implemented' }),
+    debugAppendLog: async () => ({ success: false, error: 'not implemented' }),
     githubCheckCLIInstalled: async () => false,
     githubInstallCLI: async () => ({ success: false, error: 'not implemented' }),
     githubAuth: async () => ({ success: false, error: 'not implemented' }),
@@ -179,6 +198,7 @@ export function installPlatformBridge() {
     githubGetRepositories: async () => [],
     githubCloneRepository: async () => ({ success: false, error: 'not implemented' }),
     githubListPullRequests: async () => ({ success: false, error: 'not implemented' }),
+    githubCreatePullRequestWorktree: async () => ({ success: false, error: 'not implemented' }),
     githubLogout: async () => ({ success: false, error: 'not implemented' }),
     githubGetOwners: async () => ({ success: false, owners: [] }),
     githubValidateRepoName: async () => ({
@@ -191,6 +211,16 @@ export function installPlatformBridge() {
     githubIssuesList: async () => ({ success: false, error: 'not implemented' }),
     githubIssuesSearch: async () => ({ success: false, error: 'not implemented' }),
     githubIssueGet: async () => ({ success: false, error: 'not implemented' }),
+    linearCheckConnection: async () => ({ connected: false }),
+    linearSaveToken: async () => ({ success: false, error: 'not implemented' }),
+    linearClearToken: async () => ({ success: false, error: 'not implemented' }),
+    linearInitialFetch: async () => ({ success: false, error: 'not implemented' }),
+    linearSearchIssues: async () => ({ success: false, error: 'not implemented' }),
+    jiraSaveCredentials: async () => ({ success: false, error: 'not implemented' }),
+    jiraClearCredentials: async () => ({ success: false, error: 'not implemented' }),
+    jiraCheckConnection: async () => ({ connected: false }),
+    jiraInitialFetch: async () => ({ success: false, error: 'not implemented' }),
+    jiraSearchIssues: async () => ({ success: false, error: 'not implemented' }),
     connectToGitHub: async () => ({ success: false, error: 'not implemented' }),
     onGithubAuthDeviceCode: () => noopCleanup,
     onGithubAuthPolling: () => noopCleanup,
@@ -250,6 +280,8 @@ export function installPlatformBridge() {
 
   (window as any).electronAPI = api;
 
+  const runEventUnsubscribers: Array<() => void> = [];
+
   if (shouldInitTauri) {
     void Promise.all([
       import('@tauri-apps/api/core'),
@@ -259,12 +291,48 @@ export function installPlatformBridge() {
         (window as any).electronAPI.__runtime = 'tauri';
         (window as any).electronAPI.__runtimeReady = true;
         (window as any).electronAPI.getAppVersion = () => invoke<string>('app_get_version');
+        (window as any).electronAPI.getElectronVersion = () =>
+          invoke<string>('app_get_electron_version');
         (window as any).electronAPI.getPlatform = () => invoke<string>('app_get_platform');
         (window as any).electronAPI.openExternal = (url: string) =>
           invoke('app_open_external', { url });
         (window as any).electronAPI.openIn = (args: { app: string; path: string }) =>
           invoke('app_open_in', args);
         (window as any).electronAPI.openProject = () => invoke('project_open');
+        (window as any).electronAPI.checkForUpdates = () => invoke('update_check');
+        (window as any).electronAPI.downloadUpdate = () => invoke('update_download');
+        (window as any).electronAPI.quitAndInstallUpdate = () => invoke('update_quit_and_install');
+        (window as any).electronAPI.openLatestDownload = () => invoke('update_open_latest');
+        (window as any).electronAPI.onUpdateEvent = (
+          listener: (data: { type: string; payload?: any }) => void
+        ) => {
+          const pairs: Array<[string, string]> = [
+            ['update:checking', 'checking'],
+            ['update:available', 'available'],
+            ['update:not-available', 'not-available'],
+            ['update:error', 'error'],
+            ['update:download-progress', 'download-progress'],
+            ['update:downloaded', 'downloaded'],
+          ];
+          const unsubs: Array<() => void> = [];
+          pairs.forEach(([channel, type]) => {
+            const promise = listen(channel, (event) => {
+              listener({ type, payload: event.payload });
+            });
+            promise
+              .then((unlisten) => {
+                unsubs.push(unlisten);
+              })
+              .catch(() => {});
+          });
+          return () => {
+            unsubs.forEach((fn) => {
+              try {
+                fn();
+              } catch {}
+            });
+          };
+        };
         (window as any).electronAPI.ptyStart = (opts: {
           id: string;
           cwd?: string;
@@ -534,6 +602,53 @@ export function installPlatformBridge() {
             projectId: args.projectId,
             baseRef: args.baseRef,
           });
+        (window as any).electronAPI.fetchProjectBaseRef = (args: {
+          projectId: string;
+          projectPath: string;
+        }) =>
+          invoke('project_settings_fetch_base_ref', {
+            projectId: args.projectId,
+            projectPath: args.projectPath,
+          });
+        (window as any).electronAPI.worktreeCreate = (args: {
+          projectPath: string;
+          taskName: string;
+          projectId: string;
+          autoApprove?: boolean;
+        }) =>
+          invoke('worktree_create', {
+            projectPath: args.projectPath,
+            taskName: args.taskName,
+            projectId: args.projectId,
+            autoApprove: args.autoApprove,
+          });
+        (window as any).electronAPI.worktreeList = (args: { projectPath: string }) =>
+          invoke('worktree_list', { projectPath: args.projectPath });
+        (window as any).electronAPI.worktreeRemove = (args: {
+          projectPath: string;
+          worktreeId: string;
+          worktreePath?: string;
+          branch?: string;
+        }) =>
+          invoke('worktree_remove', {
+            projectPath: args.projectPath,
+            worktreeId: args.worktreeId,
+            worktreePath: args.worktreePath,
+            branch: args.branch,
+          });
+        (window as any).electronAPI.worktreeStatus = (args: { worktreePath: string }) =>
+          invoke('worktree_status', { worktreePath: args.worktreePath });
+        (window as any).electronAPI.worktreeMerge = (args: {
+          projectPath: string;
+          worktreeId: string;
+        }) =>
+          invoke('worktree_merge', {
+            projectPath: args.projectPath,
+            worktreeId: args.worktreeId,
+          });
+        (window as any).electronAPI.worktreeGet = (args: { worktreeId: string }) =>
+          invoke('worktree_get', { worktreeId: args.worktreeId });
+        (window as any).electronAPI.worktreeGetAll = () => invoke('worktree_get_all');
         (window as any).electronAPI.fsList = (
           root: string,
           opts?: { includeDirs?: boolean; maxEntries?: number }
@@ -563,6 +678,74 @@ export function installPlatformBridge() {
             srcPath: args.srcPath,
             subdir: args.subdir,
           });
+        (window as any).electronAPI.loadContainerConfig = (taskPath: string) =>
+          invoke('container_load_config', { taskPath });
+        (window as any).electronAPI.startContainerRun = (args: {
+          taskId: string;
+          taskPath: string;
+          runId?: string;
+          mode?: 'container' | 'host';
+        }) =>
+          invoke('container_start_run', {
+            taskId: args.taskId,
+            taskPath: args.taskPath,
+            runId: args.runId,
+            mode: args.mode,
+          });
+        (window as any).electronAPI.stopContainerRun = (taskId: string) =>
+          invoke('container_stop_run', { taskId });
+        (window as any).electronAPI.inspectContainerRun = (taskId: string) =>
+          invoke('container_inspect_run', { taskId });
+        (window as any).electronAPI.resolveServiceIcon = (args: {
+          service: string;
+          allowNetwork?: boolean;
+          taskPath?: string;
+        }) =>
+          invoke('icons_resolve_service', {
+            service: args.service,
+            allowNetwork: args.allowNetwork,
+            taskPath: args.taskPath,
+          });
+        (window as any).electronAPI.onRunEvent = (listener: (event: any) => void) => {
+          const promise = listen('run:event', (event) => {
+            listener(event.payload as any);
+          });
+          promise
+            .then((unlisten) => {
+              runEventUnsubscribers.push(unlisten);
+            })
+            .catch(() => {});
+          return () => {
+            promise.then((unlisten) => unlisten()).catch(() => {});
+          };
+        };
+        (window as any).electronAPI.removeRunEventListeners = () => {
+          const pending = runEventUnsubscribers.splice(0, runEventUnsubscribers.length);
+          pending.forEach((fn) => {
+            try {
+              fn();
+            } catch {}
+          });
+        };
+        (window as any).electronAPI.netProbePorts = (
+          host: string,
+          ports: number[],
+          timeoutMs?: number
+        ) =>
+          invoke('net_probe_ports', {
+            host,
+            ports,
+            timeoutMs,
+          });
+        (window as any).electronAPI.planLock = (taskPath: string) =>
+          invoke('plan_lock', { taskPath });
+        (window as any).electronAPI.planUnlock = (taskPath: string) =>
+          invoke('plan_unlock', { taskPath });
+        (window as any).electronAPI.debugAppendLog = (
+          filePath: string,
+          content: string,
+          options?: { reset?: boolean }
+        ) => invoke('debug_append_log', { filePath, content, options });
         (window as any).electronAPI.onGithubAuthDeviceCode = (
           listener: (data: {
             userCode: string;
@@ -660,6 +843,70 @@ export function installPlatformBridge() {
             promise.then((unlisten) => unlisten()).catch(() => {});
           };
         };
+        (window as any).electronAPI.browserShow = (
+          bounds: { x: number; y: number; width: number; height: number },
+          url?: string
+        ) =>
+          invoke('browser_view_show', {
+            bounds,
+            url,
+          });
+        (window as any).electronAPI.browserHide = () => invoke('browser_view_hide');
+        (window as any).electronAPI.browserSetBounds = (bounds: {
+          x: number;
+          y: number;
+          width: number;
+          height: number;
+        }) => invoke('browser_view_set_bounds', { bounds });
+        (window as any).electronAPI.browserLoadURL = (url: string, forceReload?: boolean) =>
+          invoke('browser_view_load_url', { url, forceReload });
+        (window as any).electronAPI.browserGoBack = () => invoke('browser_view_go_back');
+        (window as any).electronAPI.browserGoForward = () => invoke('browser_view_go_forward');
+        (window as any).electronAPI.browserReload = () => invoke('browser_view_reload');
+        (window as any).electronAPI.browserOpenDevTools = () =>
+          invoke('browser_view_open_devtools');
+        (window as any).electronAPI.browserClear = () => invoke('browser_view_clear');
+        (window as any).electronAPI.linearSaveToken = (token: string) =>
+          invoke('linear_save_token', { token });
+        (window as any).electronAPI.linearCheckConnection = () =>
+          invoke('linear_check_connection');
+        (window as any).electronAPI.linearClearToken = () => invoke('linear_clear_token');
+        (window as any).electronAPI.linearInitialFetch = (limit?: number) =>
+          invoke('linear_initial_fetch', { limit });
+        (window as any).electronAPI.linearSearchIssues = (searchTerm: string, limit?: number) =>
+          invoke('linear_search_issues', { searchTerm, limit });
+        (window as any).electronAPI.jiraSaveCredentials = (args: {
+          siteUrl: string;
+          email: string;
+          token: string;
+        }) =>
+          invoke('jira_save_credentials', {
+            siteUrl: args.siteUrl,
+            email: args.email,
+            token: args.token,
+          });
+        (window as any).electronAPI.jiraClearCredentials = () => invoke('jira_clear_credentials');
+        (window as any).electronAPI.jiraCheckConnection = () => invoke('jira_check_connection');
+        (window as any).electronAPI.jiraInitialFetch = (limit?: number) =>
+          invoke('jira_initial_fetch', { limit });
+        (window as any).electronAPI.jiraSearchIssues = (searchTerm: string, limit?: number) =>
+          invoke('jira_search_issues', { searchTerm, limit });
+        (window as any).electronAPI.githubCreatePullRequestWorktree = (args: {
+          projectPath: string;
+          projectId: string;
+          prNumber: number;
+          prTitle?: string;
+          taskName?: string;
+          branchName?: string;
+        }) =>
+          invoke('github_create_pull_request_worktree', {
+            projectPath: args.projectPath,
+            projectId: args.projectId,
+            prNumber: args.prNumber,
+            prTitle: args.prTitle,
+            taskName: args.taskName,
+            branchName: args.branchName,
+          });
       })
       .catch(() => {});
   }
