@@ -5,9 +5,11 @@ mod fs;
 mod github;
 mod git;
 mod host_preview;
+mod pty;
 mod providers;
 mod settings;
 mod storage;
+mod terminal_snapshots;
 mod telemetry;
 
 use tauri::Manager;
@@ -100,6 +102,7 @@ fn main() {
       app.manage(github::GitHubState::new());
       app.manage(host_preview::HostPreviewState::new());
       app.manage(providers::ProviderState::new(&app.handle()));
+      app.manage(pty::PtyState::default());
       Ok(())
     })
     .invoke_handler(tauri::generate_handler![
@@ -108,6 +111,14 @@ fn main() {
       app_open_external,
       app_open_in,
       project_open,
+      pty::pty_start,
+      pty::pty_input,
+      pty::pty_resize,
+      pty::pty_kill,
+      pty::pty_snapshot_get,
+      pty::pty_snapshot_save,
+      pty::pty_snapshot_clear,
+      pty::terminal_get_theme,
       github::github_check_cli_installed,
       github::github_install_cli,
       github::github_auth,
