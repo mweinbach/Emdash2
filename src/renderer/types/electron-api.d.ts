@@ -97,6 +97,23 @@ declare global {
         error?: string;
       }>;
 
+      // Database recovery
+      getDbInitError: () => Promise<{
+        success: boolean;
+        error?: string;
+        dbPath?: string;
+        recoveryAvailable?: boolean;
+      }>;
+      dbRetryInit: () => Promise<{ success: boolean; error?: string }>;
+      dbBackupAndReset: () => Promise<{
+        success: boolean;
+        error?: string;
+        dbPath?: string;
+        backupPath?: string;
+        movedPath?: string;
+      }>;
+      onDbInitError: (listener: (data: { message?: string; dbPath?: string }) => void) => () => void;
+
       // PTY
       ptyStart: (opts: {
         id: string;
@@ -652,6 +669,23 @@ export interface ElectronAPI {
   quitAndInstallUpdate: () => Promise<{ success: boolean; error?: string }>;
   openLatestDownload: () => Promise<{ success: boolean; error?: string }>;
   onUpdateEvent: (listener: (data: { type: string; payload?: any }) => void) => () => void;
+
+  // Database recovery
+  getDbInitError: () => Promise<{
+    success: boolean;
+    error?: string;
+    dbPath?: string;
+    recoveryAvailable?: boolean;
+  }>;
+  dbRetryInit: () => Promise<{ success: boolean; error?: string }>;
+  dbBackupAndReset: () => Promise<{
+    success: boolean;
+    error?: string;
+    dbPath?: string;
+    backupPath?: string;
+    movedPath?: string;
+  }>;
+  onDbInitError: (listener: (data: { message?: string; dbPath?: string }) => void) => () => void;
 
   // PTY
   ptyStart: (opts: {

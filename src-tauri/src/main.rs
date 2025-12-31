@@ -22,11 +22,14 @@ mod telemetry;
 mod update;
 mod worktree;
 
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 use serde_json::{json, Value};
+use std::fs::OpenOptions;
+use std::io::Write;
 use std::path::Path;
 use std::process::{Command, Stdio};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[tauri::command]
 fn app_get_version(app: tauri::AppHandle) -> String {
@@ -125,11 +128,27 @@ fn telemetry_capture(
 }
 
 fn main() {
-  tauri::Builder::default()
+  let result = tauri::Builder::default()
     .setup(|app| {
-      let state = db::init(&app.handle())
-        .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))?;
-      app.manage(state);
+      app.manage(db::DbInitErrorState::default());
+      let init_state: tauri::State<db::DbInitErrorState> = app.state();
+      let db_state = match db::init(&app.handle()) {
+        Ok(state) => state,
+        Err(err) => {
+          log_startup_error(&app.handle(), &format!("db init failed: {}", err));
+          let db_path = db::database_path_string(&app.handle());
+          init_state.set(db::DbInitErrorInfo {
+            message: err.clone(),
+            db_path: db_path.clone(),
+          });
+          let _ = app.handle().emit(
+            "db:init-error",
+            json!({ "message": err, "dbPath": db_path }),
+          );
+          db::DbState::disabled()
+        }
+      };
+      app.manage(db_state);
       app.manage(github::GitHubState::new());
       app.manage(host_preview::HostPreviewState::new());
       app.manage(providers::ProviderState::new(&app.handle()));
@@ -211,6 +230,9 @@ fn main() {
       db::db_delete_conversation,
       db::project_settings_get,
       db::project_settings_update,
+      db::db_get_init_error,
+      db::db_retry_init,
+      db::db_backup_and_reset,
       worktree::project_settings_fetch_base_ref,
       settings_get,
       settings_update,
@@ -256,8 +278,25 @@ fn main() {
       browser::browser_view_open_devtools,
       browser::browser_view_clear
     ])
-    .run(tauri::generate_context!())
-    .expect("error while running tauri application");
+    .run(tauri::generate_context!());
+  if let Err(err) = result {
+    eprintln!("error while running tauri application: {}", err);
+  }
+}
+
+fn log_startup_error(app: &tauri::AppHandle, message: &str) {
+  let dir = storage::config_dir(app);
+  let path = dir.join("startup.log");
+  if let Some(parent) = path.parent() {
+    let _ = std::fs::create_dir_all(parent);
+  }
+  let timestamp = SystemTime::now()
+    .duration_since(UNIX_EPOCH)
+    .map(|d| d.as_secs())
+    .unwrap_or(0);
+  if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(&path) {
+    let _ = writeln!(file, "[{}] {}", timestamp, message);
+  }
 }
 
 fn command_exists(command: &str) -> bool {

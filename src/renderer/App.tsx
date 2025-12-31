@@ -9,6 +9,7 @@ import BrowserPane from './components/BrowserPane';
 import ChatInterface from './components/ChatInterface';
 import { CloneFromUrlModal } from './components/CloneFromUrlModal';
 import CommandPaletteWrapper from './components/CommandPaletteWrapper';
+import DatabaseRecoveryModal, { DbInitErrorPayload } from './components/DatabaseRecoveryModal';
 import ErrorBoundary from './components/ErrorBoundary';
 import FirstLaunchModal from './components/FirstLaunchModal';
 import { GithubDeviceFlowModal } from './components/GithubDeviceFlowModal';
@@ -137,10 +138,152 @@ const AppContent: React.FC = () => {
   const [showSettings, setShowSettings] = useState<boolean>(false);
   const [showCommandPalette, setShowCommandPalette] = useState<boolean>(false);
   const [showFirstLaunchModal, setShowFirstLaunchModal] = useState<boolean>(false);
+  const [dbInitError, setDbInitError] = useState<DbInitErrorPayload | null>(null);
+  const [dbRecoveryBusy, setDbRecoveryBusy] = useState<'retry' | 'backup' | null>(null);
   const deletingTaskIdsRef = useRef<Set<string>>(new Set());
 
   // Show toast on update availability and kick off a background check
   useUpdateNotifier({ checkOnMount: true, onOpenSettings: () => setShowSettings(true) });
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const waitForRuntimeReady = (timeoutMs = 1500) =>
+      new Promise<void>((resolve) => {
+        const api: any = (window as any).electronAPI;
+        if (api?.__runtimeReady) {
+          resolve();
+          return;
+        }
+        const start = Date.now();
+        const tick = () => {
+          if (cancelled) return;
+          if (api?.__runtimeReady) {
+            resolve();
+            return;
+          }
+          if (Date.now() - start >= timeoutMs) {
+            resolve();
+            return;
+          }
+          setTimeout(tick, 50);
+        };
+        tick();
+      });
+
+    const checkDbInitError = async () => {
+      const api: any = (window as any).electronAPI;
+      if (!api?.getDbInitError) return;
+      if (api?.__runtime === 'tauri' && !api?.__runtimeReady) {
+        await waitForRuntimeReady();
+      }
+      if (cancelled) return;
+      try {
+        const result = await api.getDbInitError();
+        if (cancelled) return;
+        if (result?.success === false) {
+          setDbInitError({
+            message: result.error || 'Database failed to initialize.',
+            dbPath: result.dbPath,
+            recoveryAvailable: result.recoveryAvailable,
+          });
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error('Failed to check database status:', error);
+        }
+      }
+    };
+
+    let off: (() => void) | null = null;
+    const attachListener = async () => {
+      const api: any = (window as any).electronAPI;
+      if (api?.__runtime === 'tauri' && !api?.__runtimeReady) {
+        await waitForRuntimeReady();
+      }
+      if (cancelled) return;
+      off =
+        api?.onDbInitError?.((payload: { message?: string; dbPath?: string }) => {
+          if (cancelled) return;
+          setDbInitError({
+            message: payload?.message || 'Database failed to initialize.',
+            dbPath: payload?.dbPath,
+          });
+        }) ?? null;
+    };
+
+    void checkDbInitError();
+    void attachListener();
+    return () => {
+      cancelled = true;
+      off?.();
+    };
+  }, []);
+
+  const handleDbDismiss = useCallback(() => {
+    setDbInitError(null);
+  }, []);
+
+  const handleDbRetry = useCallback(async () => {
+    if (!window?.electronAPI?.dbRetryInit) return;
+    setDbRecoveryBusy('retry');
+    try {
+      const result = await window.electronAPI.dbRetryInit();
+      if (result?.success) {
+        toast({
+          title: 'Database recovered',
+          description: 'Reloading Emdash with the repaired database.',
+        });
+        setDbInitError(null);
+        setTimeout(() => window.location.reload(), 400);
+      } else {
+        const message = result?.error || 'Retry failed. The database is still unavailable.';
+        toast({ title: 'Retry failed', description: message, variant: 'destructive' });
+        setDbInitError((prev) =>
+          prev ? { ...prev, message } : { message, dbPath: undefined, recoveryAvailable: false }
+        );
+      }
+    } catch (error: any) {
+      const message = error?.message ? String(error.message) : 'Retry failed.';
+      toast({ title: 'Retry failed', description: message, variant: 'destructive' });
+    } finally {
+      setDbRecoveryBusy(null);
+    }
+  }, [toast]);
+
+  const handleDbBackupAndReset = useCallback(async () => {
+    if (!window?.electronAPI?.dbBackupAndReset) return;
+    setDbRecoveryBusy('backup');
+    try {
+      const result = await window.electronAPI.dbBackupAndReset();
+      if (result?.success) {
+        const location = result?.backupPath
+          ? `Backup saved to ${result.backupPath}.`
+          : 'Backup saved to your Downloads folder.';
+        toast({
+          title: 'Backup created',
+          description: `${location} Reloading with a fresh database.`,
+        });
+        setDbInitError(null);
+        setTimeout(() => window.location.reload(), 400);
+      } else {
+        const backupNote = result?.backupPath
+          ? `Backup saved to ${result.backupPath}.`
+          : 'No backup was created.';
+        const message = result?.error || 'Unable to reset the database.';
+        toast({
+          title: result?.backupPath ? 'Reset failed' : 'Backup failed',
+          description: `${message} ${backupNote}`,
+          variant: 'destructive',
+        });
+      }
+    } catch (error: any) {
+      const message = error?.message ? String(error.message) : 'Backup failed.';
+      toast({ title: 'Backup failed', description: message, variant: 'destructive' });
+    } finally {
+      setDbRecoveryBusy(null);
+    }
+  }, [toast]);
 
   const defaultPanelLayout = React.useMemo(() => {
     const stored = loadPanelSizes(PANEL_LAYOUT_STORAGE_KEY, DEFAULT_PANEL_LAYOUT);
@@ -1988,6 +2131,16 @@ const AppContent: React.FC = () => {
                 </ResizablePanel>
               </ResizablePanelGroup>
             </div>
+            {dbInitError ? (
+              <DatabaseRecoveryModal
+                open={!!dbInitError}
+                info={dbInitError}
+                busyAction={dbRecoveryBusy}
+                onRetry={handleDbRetry}
+                onBackupAndReset={handleDbBackupAndReset}
+                onClose={handleDbDismiss}
+              />
+            ) : null}
             <SettingsModal isOpen={showSettings} onClose={handleCloseSettings} />
             <CommandPaletteWrapper
               isOpen={showCommandPalette}
@@ -2030,7 +2183,11 @@ const AppContent: React.FC = () => {
               taskId={activeTask?.id || null}
               taskPath={activeTask?.path || null}
               overlayActive={
-                showSettings || showCommandPalette || showTaskModal || showFirstLaunchModal
+                showSettings ||
+                showCommandPalette ||
+                showTaskModal ||
+                showFirstLaunchModal ||
+                !!dbInitError
               }
             />
           </RightSidebarProvider>

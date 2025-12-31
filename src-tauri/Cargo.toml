@@ -27,6 +27,7 @@ keyring = "2"
 rand = "0.8"
 semver = "1"
 sha1 = "0.10"
+zip = "0.6.6"
 
 [features]
 custom-protocol = ["tauri/custom-protocol"]

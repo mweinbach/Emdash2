@@ -1,14 +1,19 @@
-use crate::storage;
 use crate::runtime::run_blocking;
+use crate::storage;
 use rusqlite::{params, Connection, OptionalExtension};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
-use std::fs;
+use std::fs::{self, File};
+use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
+use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::Manager;
+use zip::write::FileOptions;
+use zip::CompressionMethod;
 
 const CURRENT_DB_FILENAME: &str = "emdash.db";
 const LEGACY_DB_FILENAMES: &[&str] = &["database.sqlite", "orcbench.db"];
@@ -16,7 +21,60 @@ const LEGACY_DIRS: &[&str] = &["Electron", "emdash", "Emdash"];
 
 pub struct DbState {
   conn: Mutex<Option<Connection>>,
-  disabled: bool,
+  disabled: AtomicBool,
+}
+
+impl DbState {
+  pub fn disabled() -> Self {
+    Self {
+      conn: Mutex::new(None),
+      disabled: AtomicBool::new(true),
+    }
+  }
+
+  fn is_disabled(&self) -> bool {
+    self.disabled.load(Ordering::SeqCst)
+  }
+
+  fn set_disabled(&self, value: bool) {
+    self.disabled.store(value, Ordering::SeqCst);
+  }
+
+  fn replace_conn(&self, conn: Option<Connection>) -> Result<(), String> {
+    let mut guard = self.conn.lock().map_err(|_| "DB lock poisoned".to_string())?;
+    *guard = conn;
+    Ok(())
+  }
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DbInitErrorInfo {
+  pub message: String,
+  pub db_path: Option<String>,
+}
+
+#[derive(Default)]
+pub struct DbInitErrorState {
+  info: Mutex<Option<DbInitErrorInfo>>,
+}
+
+impl DbInitErrorState {
+  pub fn set(&self, info: DbInitErrorInfo) {
+    if let Ok(mut guard) = self.info.lock() {
+      *guard = Some(info);
+    }
+  }
+
+  pub fn clear(&self) {
+    if let Ok(mut guard) = self.info.lock() {
+      *guard = None;
+    }
+  }
+
+  pub fn get(&self) -> Option<DbInitErrorInfo> {
+    self.info.lock().ok().and_then(|guard| guard.clone())
+  }
 }
 
 #[derive(Clone)]
@@ -224,6 +282,12 @@ fn resolve_database_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
   Ok(current_path)
 }
 
+pub fn database_path_string(app: &tauri::AppHandle) -> Option<String> {
+  resolve_database_path(app)
+    .ok()
+    .map(|path| path.to_string_lossy().to_string())
+}
+
 fn resolve_migrations_path(app: &tauri::AppHandle) -> Option<PathBuf> {
   let mut candidates: Vec<PathBuf> = Vec::new();
 
@@ -245,6 +309,20 @@ fn resolve_migrations_path(app: &tauri::AppHandle) -> Option<PathBuf> {
   }
 
   candidates.into_iter().find(|path| path.exists())
+}
+
+fn open_database_with_path(app: &tauri::AppHandle) -> Result<(Connection, PathBuf), String> {
+  let db_path = resolve_database_path(app)?;
+  if let Some(parent) = db_path.parent() {
+    let _ = fs::create_dir_all(parent);
+  }
+  let conn = Connection::open(&db_path).map_err(|err| err.to_string())?;
+
+  let migrations_path = resolve_migrations_path(app)
+    .ok_or_else(|| "Drizzle migrations folder not found".to_string())?;
+  ensure_migrations(&conn, &migrations_path)?;
+
+  Ok((conn, db_path))
 }
 
 fn read_journal(migrations_path: &Path) -> Option<Vec<MigrationEntry>> {
@@ -437,26 +515,93 @@ fn ensure_migrations(conn: &Connection, migrations_path: &Path) -> Result<(), St
 
 pub fn init(app: &tauri::AppHandle) -> Result<DbState, String> {
   if std::env::var("EMDASH_DISABLE_NATIVE_DB").ok().as_deref() == Some("1") {
-    return Ok(DbState {
-      conn: Mutex::new(None),
-      disabled: true,
-    });
+    return Ok(DbState::disabled());
   }
-
-  let db_path = resolve_database_path(app)?;
-  if let Some(parent) = db_path.parent() {
-    let _ = fs::create_dir_all(parent);
-  }
-  let conn = Connection::open(&db_path).map_err(|err| err.to_string())?;
-
-  let migrations_path = resolve_migrations_path(app)
-    .ok_or_else(|| "Drizzle migrations folder not found".to_string())?;
-  ensure_migrations(&conn, &migrations_path)?;
+  let (conn, _path) = open_database_with_path(app)?;
 
   Ok(DbState {
     conn: Mutex::new(Some(conn)),
-    disabled: false,
+    disabled: AtomicBool::new(false),
   })
+}
+
+fn download_dir(app: &tauri::AppHandle) -> PathBuf {
+  app
+    .path()
+    .download_dir()
+    .ok()
+    .or_else(|| app.path().home_dir().ok())
+    .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")))
+}
+
+fn backup_timestamp() -> i64 {
+  SystemTime::now()
+    .duration_since(UNIX_EPOCH)
+    .map(|d| d.as_secs() as i64)
+    .unwrap_or(0)
+}
+
+fn build_readme(db_path: &Path, created_at: i64) -> String {
+  let db_name = db_path
+    .file_name()
+    .and_then(|name| name.to_str())
+    .unwrap_or("emdash.db");
+  format!(
+    "Emdash database backup\n\nCreated (epoch seconds): {created_at}\nSource: {db_path}\n\nRestore steps:\n1) Quit Emdash.\n2) Unzip this archive.\n3) Run ./restore.sh\n\nManual restore:\n- Copy {db_name} to {db_path}\n",
+    created_at = created_at,
+    db_path = db_path.to_string_lossy(),
+    db_name = db_name
+  )
+}
+
+fn build_restore_script(db_path: &Path) -> String {
+  let db_name = db_path
+    .file_name()
+    .and_then(|name| name.to_str())
+    .unwrap_or("emdash.db");
+  format!(
+    "#!/bin/sh\nset -e\nSCRIPT_DIR=\"$(cd \"$(dirname \"$0\")\" && pwd)\"\nDB_NAME=\"{db_name}\"\nTARGET_PATH=\"{db_path}\"\n\nmkdir -p \"$(dirname \"$TARGET_PATH\")\"\ncp -f \"$SCRIPT_DIR/$DB_NAME\" \"$TARGET_PATH\"\necho \"Restored to $TARGET_PATH\"\n",
+    db_name = db_name,
+    db_path = db_path.to_string_lossy()
+  )
+}
+
+fn write_backup_zip(db_path: &Path, zip_path: &Path, created_at: i64) -> Result<(), String> {
+  let db_name = db_path
+    .file_name()
+    .and_then(|name| name.to_str())
+    .unwrap_or("emdash.db")
+    .to_string();
+  let readme = build_readme(db_path, created_at);
+  let restore = build_restore_script(db_path);
+
+  if let Some(parent) = zip_path.parent() {
+    let _ = fs::create_dir_all(parent);
+  }
+
+  let file = File::create(zip_path).map_err(|err| err.to_string())?;
+  let mut zip = zip::ZipWriter::new(file);
+  let options = FileOptions::default().compression_method(CompressionMethod::Deflated);
+
+  zip
+    .start_file(db_name, options)
+    .map_err(|err| err.to_string())?;
+  let mut source = File::open(db_path).map_err(|err| err.to_string())?;
+  std::io::copy(&mut source, &mut zip).map_err(|err| err.to_string())?;
+
+  zip
+    .start_file("README.txt", options)
+    .map_err(|err| err.to_string())?;
+  zip.write_all(readme.as_bytes()).map_err(|err| err.to_string())?;
+
+  let script_options = options.unix_permissions(0o755);
+  zip
+    .start_file("restore.sh", script_options)
+    .map_err(|err| err.to_string())?;
+  zip.write_all(restore.as_bytes()).map_err(|err| err.to_string())?;
+
+  zip.finish().map_err(|err| err.to_string())?;
+  Ok(())
 }
 
 fn metadata_to_string(meta: Option<Value>) -> Option<String> {
@@ -482,7 +627,7 @@ pub(crate) fn project_settings_row(
   state: &DbState,
   project_id: &str,
 ) -> Result<ProjectSettingsRow, String> {
-  if state.disabled {
+  if state.is_disabled() {
     return Err("DB disabled".to_string());
   }
   let guard = lock_conn(state)?;
@@ -509,7 +654,7 @@ pub(crate) fn update_project_base_ref(
   project_id: &str,
   base_ref: &str,
 ) -> Result<(), String> {
-  if state.disabled {
+  if state.is_disabled() {
     return Err("DB disabled".to_string());
   }
   let guard = lock_conn(state)?;
@@ -543,7 +688,7 @@ pub(crate) fn update_project_base_ref(
 }
 
 pub fn task_agent_id_for_path(state: &DbState, task_path: &str) -> Option<String> {
-  if state.disabled {
+  if state.is_disabled() {
     return None;
   }
   let guard = lock_conn(state).ok()?;
@@ -596,7 +741,7 @@ fn query_project_settings(conn: &Connection, project_id: &str) -> Result<Value, 
 pub async fn db_get_projects(app: tauri::AppHandle) -> Value {
   run_blocking(json!([]), move || {
     let state: tauri::State<DbState> = app.state();
-    if state.disabled {
+    if state.is_disabled() {
       return json!([]);
     }
     let guard = match lock_conn(&state) {
@@ -668,7 +813,7 @@ pub async fn db_save_project(app: tauri::AppHandle, project: Value) -> Value {
     json!({ "success": false, "error": "Task cancelled" }),
     move || {
       let state: tauri::State<DbState> = app.state();
-      if state.disabled {
+      if state.is_disabled() {
         return json!({ "success": true });
       }
       let input: ProjectInput = match serde_json::from_value(project) {
@@ -729,7 +874,7 @@ pub async fn db_save_project(app: tauri::AppHandle, project: Value) -> Value {
 pub async fn db_get_tasks(app: tauri::AppHandle, project_id: Option<String>) -> Value {
   run_blocking(json!([]), move || {
     let state: tauri::State<DbState> = app.state();
-    if state.disabled {
+    if state.is_disabled() {
       return json!([]);
     }
     let guard = match lock_conn(&state) {
@@ -787,7 +932,7 @@ pub async fn db_save_task(app: tauri::AppHandle, task: Value) -> Value {
     json!({ "success": false, "error": "Task cancelled" }),
     move || {
       let state: tauri::State<DbState> = app.state();
-      if state.disabled {
+      if state.is_disabled() {
         return json!({ "success": true });
       }
       let input: TaskInput = match serde_json::from_value(task) {
@@ -845,7 +990,7 @@ pub async fn db_delete_project(app: tauri::AppHandle, project_id: String) -> Val
     json!({ "success": false, "error": "Task cancelled" }),
     move || {
       let state: tauri::State<DbState> = app.state();
-      if state.disabled {
+      if state.is_disabled() {
         return json!({ "success": true });
       }
       let guard = match lock_conn(&state) {
@@ -872,7 +1017,7 @@ pub async fn db_delete_task(app: tauri::AppHandle, task_id: String) -> Value {
     json!({ "success": false, "error": "Task cancelled" }),
     move || {
       let state: tauri::State<DbState> = app.state();
-      if state.disabled {
+      if state.is_disabled() {
         return json!({ "success": true });
       }
       let guard = match lock_conn(&state) {
@@ -899,7 +1044,7 @@ pub async fn db_save_conversation(app: tauri::AppHandle, conversation: Value) ->
     json!({ "success": false, "error": "Task cancelled" }),
     move || {
       let state: tauri::State<DbState> = app.state();
-      if state.disabled {
+      if state.is_disabled() {
         return json!({ "success": true });
       }
       let input: ConversationInput = match serde_json::from_value(conversation) {
@@ -940,7 +1085,7 @@ pub async fn db_get_conversations(app: tauri::AppHandle, task_id: String) -> Val
     json!({ "success": false, "error": "Task cancelled" }),
     move || {
       let state: tauri::State<DbState> = app.state();
-      if state.disabled {
+      if state.is_disabled() {
         return json!({ "success": true, "conversations": [] });
       }
       let guard = match lock_conn(&state) {
@@ -996,7 +1141,7 @@ pub async fn db_get_or_create_default_conversation(
     json!({ "success": false, "error": "Task cancelled" }),
     move || {
       let state: tauri::State<DbState> = app.state();
-      if state.disabled {
+      if state.is_disabled() {
         let now = chrono::Utc::now().to_rfc3339();
         return json!({
           "success": true,
@@ -1102,7 +1247,7 @@ pub async fn db_save_message(app: tauri::AppHandle, message: Value) -> Value {
     json!({ "success": false, "error": "Task cancelled" }),
     move || {
       let state: tauri::State<DbState> = app.state();
-      if state.disabled {
+      if state.is_disabled() {
         return json!({ "success": true });
       }
       let input: MessageInput = match serde_json::from_value(message) {
@@ -1163,7 +1308,7 @@ pub async fn db_get_messages(app: tauri::AppHandle, conversation_id: String) -> 
     json!({ "success": false, "error": "Task cancelled" }),
     move || {
       let state: tauri::State<DbState> = app.state();
-      if state.disabled {
+      if state.is_disabled() {
         return json!({ "success": true, "messages": [] });
       }
       let guard = match lock_conn(&state) {
@@ -1218,7 +1363,7 @@ pub async fn db_delete_conversation(app: tauri::AppHandle, conversation_id: Stri
     json!({ "success": false, "error": "Task cancelled" }),
     move || {
       let state: tauri::State<DbState> = app.state();
-      if state.disabled {
+      if state.is_disabled() {
         return json!({ "success": true });
       }
       let guard = match lock_conn(&state) {
@@ -1245,7 +1390,7 @@ pub async fn project_settings_get(app: tauri::AppHandle, project_id: String) -> 
     json!({ "success": false, "error": "Task cancelled" }),
     move || {
       let state: tauri::State<DbState> = app.state();
-      if state.disabled {
+      if state.is_disabled() {
         return json!({ "success": false, "error": "DB disabled" });
       }
       let guard = match lock_conn(&state) {
@@ -1275,7 +1420,7 @@ pub async fn project_settings_update(
     json!({ "success": false, "error": "Task cancelled" }),
     move || {
       let state: tauri::State<DbState> = app.state();
-      if state.disabled {
+      if state.is_disabled() {
         return json!({ "success": false, "error": "DB disabled" });
       }
       if args.base_ref.trim().is_empty() {
@@ -1320,6 +1465,158 @@ pub async fn project_settings_update(
       match query_project_settings(conn, &args.project_id) {
         Ok(settings) => json!({ "success": true, "settings": settings }),
         Err(err) => json!({ "success": false, "error": err }),
+      }
+    },
+  )
+  .await
+}
+
+#[tauri::command]
+pub fn db_get_init_error(app: tauri::AppHandle) -> Value {
+  let state: tauri::State<DbInitErrorState> = app.state();
+  if let Some(info) = state.get() {
+    let recovery_available = info
+      .db_path
+      .as_ref()
+      .map(|path| Path::new(path).exists())
+      .unwrap_or(false);
+    json!({
+      "success": false,
+      "error": info.message,
+      "dbPath": info.db_path,
+      "recoveryAvailable": recovery_available
+    })
+  } else {
+    json!({ "success": true })
+  }
+}
+
+#[tauri::command]
+pub async fn db_retry_init(app: tauri::AppHandle) -> Value {
+  run_blocking(
+    json!({ "success": false, "error": "Task cancelled" }),
+    move || {
+      if std::env::var("EMDASH_DISABLE_NATIVE_DB").ok().as_deref() == Some("1") {
+        return json!({ "success": false, "error": "DB disabled via EMDASH_DISABLE_NATIVE_DB" });
+      }
+
+      let state: tauri::State<DbState> = app.state();
+      let init_state: tauri::State<DbInitErrorState> = app.state();
+      let _ = state.replace_conn(None);
+      state.set_disabled(true);
+
+      match open_database_with_path(&app) {
+        Ok((conn, _)) => match state.replace_conn(Some(conn)) {
+          Ok(_) => {
+            state.set_disabled(false);
+            init_state.clear();
+            json!({ "success": true })
+          }
+          Err(err) => json!({ "success": false, "error": err }),
+        },
+        Err(err) => {
+          init_state.set(DbInitErrorInfo {
+            message: err.clone(),
+            db_path: database_path_string(&app),
+          });
+          json!({ "success": false, "error": err })
+        }
+      }
+    },
+  )
+  .await
+}
+
+#[tauri::command]
+pub async fn db_backup_and_reset(app: tauri::AppHandle) -> Value {
+  run_blocking(
+    json!({ "success": false, "error": "Task cancelled" }),
+    move || {
+      if std::env::var("EMDASH_DISABLE_NATIVE_DB").ok().as_deref() == Some("1") {
+        return json!({ "success": false, "error": "DB disabled via EMDASH_DISABLE_NATIVE_DB" });
+      }
+
+      let state: tauri::State<DbState> = app.state();
+      let init_state: tauri::State<DbInitErrorState> = app.state();
+      let _ = state.replace_conn(None);
+      state.set_disabled(true);
+
+      let db_path = match resolve_database_path(&app) {
+        Ok(path) => path,
+        Err(err) => return json!({ "success": false, "error": err }),
+      };
+
+      let db_path_str = db_path.to_string_lossy().to_string();
+      if !db_path.exists() {
+        return json!({
+          "success": false,
+          "error": "Database file not found",
+          "dbPath": db_path_str
+        });
+      }
+
+      let created_at = backup_timestamp();
+      let zip_path = download_dir(&app).join(format!("emdash-db-backup-{}.zip", created_at));
+      if let Err(err) = write_backup_zip(&db_path, &zip_path, created_at) {
+        return json!({
+          "success": false,
+          "error": err,
+          "dbPath": db_path_str,
+          "backupPath": zip_path.to_string_lossy()
+        });
+      }
+
+      let db_name = db_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("emdash.db");
+      let moved_path = db_path.with_file_name(format!("{}.bak-{}", db_name, created_at));
+      let move_result = fs::rename(&db_path, &moved_path).or_else(|_| {
+        fs::copy(&db_path, &moved_path)
+          .and_then(|_| fs::remove_file(&db_path))
+          .map(|_| ())
+      });
+
+      if let Err(err) = move_result {
+        return json!({
+          "success": false,
+          "error": err.to_string(),
+          "dbPath": db_path_str,
+          "backupPath": zip_path.to_string_lossy(),
+          "movedPath": moved_path.to_string_lossy()
+        });
+      }
+
+      match open_database_with_path(&app) {
+        Ok((conn, _)) => match state.replace_conn(Some(conn)) {
+          Ok(_) => {
+            state.set_disabled(false);
+            init_state.clear();
+            json!({
+              "success": true,
+              "backupPath": zip_path.to_string_lossy(),
+              "movedPath": moved_path.to_string_lossy()
+            })
+          }
+          Err(err) => json!({
+            "success": false,
+            "error": err,
+            "backupPath": zip_path.to_string_lossy(),
+            "movedPath": moved_path.to_string_lossy()
+          }),
+        },
+        Err(err) => {
+          init_state.set(DbInitErrorInfo {
+            message: err.clone(),
+            db_path: database_path_string(&app),
+          });
+          json!({
+            "success": false,
+            "error": err,
+            "backupPath": zip_path.to_string_lossy(),
+            "movedPath": moved_path.to_string_lossy()
+          })
+        }
       }
     },
   )

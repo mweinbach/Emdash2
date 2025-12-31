@@ -266,6 +266,22 @@ declare global {
         issues?: any[];
         error?: string;
       }>;
+      // Database recovery
+      getDbInitError?: () => Promise<{
+        success: boolean;
+        error?: string;
+        dbPath?: string;
+        recoveryAvailable?: boolean;
+      }>;
+      dbRetryInit?: () => Promise<{ success: boolean; error?: string }>;
+      dbBackupAndReset?: () => Promise<{
+        success: boolean;
+        error?: string;
+        dbPath?: string;
+        backupPath?: string;
+        movedPath?: string;
+      }>;
+      onDbInitError?: (listener: (data: { message?: string; dbPath?: string }) => void) => () => void;
       // Database methods
       getProjects: () => Promise<any[]>;
       saveProject: (project: any) => Promise<{ success: boolean; error?: string }>;

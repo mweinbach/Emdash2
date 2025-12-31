@@ -129,6 +129,10 @@ export function installPlatformBridge() {
       currentSettings = mergeSettings(currentSettings, patch);
       return { success: true, settings: currentSettings };
     },
+    getDbInitError: async () => ({ success: true }),
+    dbRetryInit: async () => ({ success: false, error: 'not implemented' }),
+    dbBackupAndReset: async () => ({ success: false, error: 'not implemented' }),
+    onDbInitError: () => noopCleanup,
     getTelemetryStatus: async () => ({ success: true, status: telemetry }),
     setTelemetryEnabled: async (enabled: boolean) => {
       telemetry = { ...telemetry, enabled: !!enabled, userOptOut: !enabled };
@@ -409,6 +413,18 @@ export function installPlatformBridge() {
         (window as any).electronAPI.getSettings = () => invoke('settings_get');
         (window as any).electronAPI.updateSettings = (settings: Partial<Settings>) =>
           invoke('settings_update', { settings });
+        (window as any).electronAPI.getDbInitError = () => invoke('db_get_init_error');
+        (window as any).electronAPI.dbRetryInit = () => invoke('db_retry_init');
+        (window as any).electronAPI.dbBackupAndReset = () => invoke('db_backup_and_reset');
+        (window as any).electronAPI.onDbInitError = (listener: (data: any) => void) => {
+          const promise = listen('db:init-error', (event) => {
+            listener(event.payload as any);
+          });
+          promise.catch(() => {});
+          return () => {
+            promise.then((unlisten) => unlisten()).catch(() => {});
+          };
+        };
         (window as any).electronAPI.getProviderStatuses = (opts?: {
           refresh?: boolean;
           providers?: string[];
