@@ -519,6 +519,16 @@ export function installPlatformBridge() {
             promise.then((unlisten) => unlisten()).catch(() => {});
           };
         };
+
+        (window as any).desktopAPI.onPlanEvent = (listener: (data: any) => void) => {
+          const promise = listen('plan:event', (event) => {
+            listener(event.payload as any);
+          });
+          promise.catch(() => {});
+          return () => {
+            promise.then((unlisten) => unlisten()).catch(() => {});
+          };
+        };
         (window as any).desktopAPI.getProjects = () => invoke('db_get_projects');
         (window as any).desktopAPI.saveProject = (project: any) =>
           invoke('db_save_project', { project });

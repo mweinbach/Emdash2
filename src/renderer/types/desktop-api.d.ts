@@ -610,6 +610,15 @@ declare global {
         content: string,
         options?: { reset?: boolean }
       ) => Promise<{ success: boolean; error?: string }>;
+
+      // Plan mode
+      planLock: (taskPath: string) => Promise<{ success: boolean; changed?: number; error?: string }>;
+      planUnlock: (taskPath: string) => Promise<{ success: boolean; restored?: number; error?: string }>;
+      planApplyLock: (taskPath: string) => Promise<{ success: boolean; changed?: number; error?: string }>;
+      planReleaseLock: (
+        taskPath: string
+      ) => Promise<{ success: boolean; restored?: number; error?: string }>;
+      onPlanEvent: (listener: (evt: { type: string; relPath?: string; root?: string }) => void) => () => void;
     };
   }
 }
@@ -669,6 +678,13 @@ export interface DesktopAPI {
     listener: (info: { exitCode: number; signal?: number }) => void
   ) => () => void;
   onPtyStarted: (listener: (data: { id: string }) => void) => () => void;
+
+  // Plan mode
+  planLock: (taskPath: string) => Promise<{ success: boolean; changed?: number; error?: string }>;
+  planUnlock: (taskPath: string) => Promise<{ success: boolean; restored?: number; error?: string }>;
+  planApplyLock: (taskPath: string) => Promise<{ success: boolean; changed?: number; error?: string }>;
+  planReleaseLock: (taskPath: string) => Promise<{ success: boolean; restored?: number; error?: string }>;
+  onPlanEvent: (listener: (evt: { type: string; relPath?: string; root?: string }) => void) => () => void;
 
   // Worktree management
   worktreeCreate: (args: {
