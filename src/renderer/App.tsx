@@ -32,7 +32,6 @@ import { useToast } from './hooks/use-toast';
 import { useGithubAuth } from './hooks/useGithubAuth';
 import { usePlanToasts } from './hooks/usePlanToasts';
 import { useTheme } from './hooks/useTheme';
-import useUpdateNotifier from './hooks/useUpdateNotifier';
 import { getContainerRunState } from './lib/containerRuns';
 import { loadPanelSizes, savePanelSizes } from './lib/persisted-layout';
 import {
@@ -141,9 +140,6 @@ const AppContent: React.FC = () => {
   const [dbInitError, setDbInitError] = useState<DbInitErrorPayload | null>(null);
   const [dbRecoveryBusy, setDbRecoveryBusy] = useState<'retry' | 'backup' | null>(null);
   const deletingTaskIdsRef = useRef<Set<string>>(new Set());
-
-  // Show toast on update availability and kick off a background check
-  useUpdateNotifier({ checkOnMount: true, onOpenSettings: () => setShowSettings(true) });
 
   useEffect(() => {
     let cancelled = false;
@@ -437,11 +433,6 @@ const AppContent: React.FC = () => {
     } catch {
       // ignore
     }
-    try {
-      void window.electronAPI.setOnboardingSeen?.(true);
-    } catch {
-      // ignore
-    }
     setShowFirstLaunchModal(false);
   }, []);
 
@@ -455,12 +446,6 @@ const AppContent: React.FC = () => {
       }
       if (seenLocal) return;
 
-      try {
-        const res = await window.electronAPI.getTelemetryStatus?.();
-        if (res?.success && res.status?.onboardingSeen) return;
-      } catch {
-        // ignore
-      }
       setShowFirstLaunchModal(true);
     };
     void check();

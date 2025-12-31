@@ -1,6 +1,5 @@
 use crate::storage;
 use crate::runtime::run_blocking;
-use crate::telemetry;
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -284,7 +283,6 @@ pub async fn jira_save_credentials(app: tauri::AppHandle, args: JiraSaveArgs) ->
           if let Err(err) = write_creds(&app, &JiraCreds { site_url: site.to_string(), email: email.to_string() }) {
             return json!({ "success": false, "error": err });
           }
-          let _ = telemetry::capture(&app, "jira_connected".to_string(), None);
           json!({ "success": true, "displayName": me.get("displayName").and_then(|v| v.as_str()).unwrap_or("") })
         }
         Err(err) => json!({ "success": false, "error": err }),
@@ -301,7 +299,6 @@ pub async fn jira_clear_credentials(app: tauri::AppHandle) -> Value {
     move || {
       let _ = clear_token();
       clear_creds(&app);
-      let _ = telemetry::capture(&app, "jira_disconnected".to_string(), None);
       json!({ "success": true })
     },
   )

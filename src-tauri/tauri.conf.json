@@ -1,6 +1,6 @@
 {
   "productName": "emdash",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "identifier": "com.emdash2",
   "build": {
     "beforeDevCommand": "bun run dev:renderer",
@@ -44,6 +44,6 @@
       "../src/assets/images/emdash/emdash_logo.png",
       "../src/assets/images/emdash/emdash.icns"
     ],
-    "resources": ["../drizzle/**", "../src-tauri/appConfig.json"]
+    "resources": ["../drizzle/**"]
   }
 }

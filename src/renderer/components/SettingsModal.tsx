@@ -4,10 +4,8 @@ import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { Button } from './ui/button';
 import { Spinner } from './ui/spinner';
 import { X, Settings2, Cable, RefreshCw, GitBranch, Puzzle } from 'lucide-react';
-import VersionCard from './VersionCard';
 import IntegrationsCard from './IntegrationsCard';
 import CliProvidersList, { BASE_CLI_PROVIDERS } from './CliProvidersList';
-import TelemetryCard from './TelemetryCard';
 import BrowserPreviewSettingsCard from './BrowserPreviewSettingsCard';
 import NotificationSettingsCard from './NotificationSettingsCard';
 import RepositorySettingsCard from './RepositorySettingsCard';
@@ -101,14 +99,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   }, [isOpen]);
 
   useEffect(() => {
-    if (isOpen) {
-      void import('../lib/telemetryClient').then(({ captureTelemetry }) => {
-        captureTelemetry('settings_tab_viewed', { tab: activeTab });
-      });
-    }
-  }, [activeTab, isOpen]);
-
-  useEffect(() => {
     let cancelled = false;
 
     const applyCachedStatuses = (statuses: Record<string, CachedProviderStatus> | undefined) => {
@@ -183,13 +173,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
         title: 'General',
         description: '',
         sections: [
-          { title: 'Privacy & Telemetry', render: () => <TelemetryCard /> },
           { title: 'Default AI provider', render: () => <DefaultProviderSettingsCard /> },
           { title: 'Tasks', render: () => <TaskSettingsCard /> },
           { title: 'Notifications', render: () => <NotificationSettingsCard /> },
           { title: 'In‑app Browser Preview', render: () => <BrowserPreviewSettingsCard /> },
           { title: 'Project prep', render: () => <ProjectPrepSettingsCard /> },
-          { title: 'Version', render: () => <VersionCard /> },
           {
             title: 'How to use Emdash',
             render: () => (

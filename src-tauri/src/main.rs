@@ -19,8 +19,6 @@ mod settings;
 mod system_env;
 mod storage;
 mod terminal_snapshots;
-mod telemetry;
-mod update;
 mod worktree;
 
 use tauri::{Emitter, Manager};
@@ -102,32 +100,6 @@ fn settings_update(app: tauri::AppHandle, settings: Value) -> Result<Value, Stri
 }
 
 #[tauri::command]
-fn telemetry_get_status(app: tauri::AppHandle) -> Result<Value, String> {
-  let status = telemetry::get_status(&app);
-  Ok(json!({ "success": true, "status": status }))
-}
-
-#[tauri::command]
-fn telemetry_set_enabled(app: tauri::AppHandle, enabled: bool) -> Result<Value, String> {
-  let status = telemetry::set_enabled(&app, enabled);
-  Ok(json!({ "success": true, "status": status }))
-}
-
-#[tauri::command]
-fn telemetry_set_onboarding_seen(app: tauri::AppHandle, flag: bool) -> Result<Value, String> {
-  let status = telemetry::set_onboarding_seen(&app, flag);
-  Ok(json!({ "success": true, "status": status }))
-}
-
-#[tauri::command]
-fn telemetry_capture(
-  app: tauri::AppHandle,
-  event: String,
-  properties: Option<Value>,
-) -> Result<Value, String> {
-  Ok(telemetry::capture(&app, event, properties))
-}
-
 fn main() {
   system_env::bootstrap();
   let result = tauri::Builder::default()
@@ -158,7 +130,6 @@ fn main() {
       app.manage(worktree::WorktreeState::new());
       app.manage(container::ContainerState::new());
       app.manage(browser::BrowserViewState::new());
-      app.manage(update::UpdateState::new());
       Ok(())
     })
     .invoke_handler(tauri::generate_handler![
@@ -238,14 +209,6 @@ fn main() {
       worktree::project_settings_fetch_base_ref,
       settings_get,
       settings_update,
-      telemetry_get_status,
-      telemetry_set_enabled,
-      telemetry_set_onboarding_seen,
-      telemetry_capture,
-      update::update_check,
-      update::update_download,
-      update::update_quit_and_install,
-      update::update_open_latest,
       fs::fs_list,
       fs::fs_read,
       fs::fs_write,

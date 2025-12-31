@@ -1,5 +1,4 @@
 use crate::runtime::run_blocking;
-use crate::telemetry;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
@@ -177,7 +176,6 @@ pub async fn linear_save_token(app: tauri::AppHandle, token: String) -> Value {
             .or_else(|| viewer.display_name.clone())
             .or_else(|| viewer.name.clone());
 
-          let _ = telemetry::capture(&app, "linear_connected".to_string(), None);
 
           json!({
             "success": true,
@@ -198,7 +196,6 @@ pub async fn linear_clear_token(app: tauri::AppHandle) -> Value {
     json!({ "success": false, "error": "Task cancelled" }),
     move || match clear_token() {
       Ok(_) => {
-        let _ = telemetry::capture(&app, "linear_disconnected".to_string(), None);
         json!({ "success": true })
       }
       Err(err) => json!({ "success": false, "error": err }),

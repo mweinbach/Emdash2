@@ -19,12 +19,6 @@ declare global {
       getAppVersion: () => Promise<string>;
       getElectronVersion: () => Promise<string>;
       getPlatform: () => Promise<string>;
-      // Updater
-      checkForUpdates: () => Promise<{ success: boolean; result?: any; error?: string }>;
-      downloadUpdate: () => Promise<{ success: boolean; error?: string }>;
-      quitAndInstallUpdate: () => Promise<{ success: boolean; error?: string }>;
-      openLatestDownload: () => Promise<{ success: boolean; error?: string }>;
-      onUpdateEvent: (listener: (data: { type: string; payload?: any }) => void) => () => void;
 
       // App settings
       getSettings: () => Promise<{
@@ -395,44 +389,6 @@ declare global {
         branch?: string;
         error?: string;
       }>;
-      // Telemetry
-      captureTelemetry: (
-        event: string,
-        properties?: Record<string, any>
-      ) => Promise<{ success: boolean; disabled?: boolean; error?: string }>;
-      getTelemetryStatus: () => Promise<{
-        success: boolean;
-        status?: {
-          enabled: boolean;
-          envDisabled: boolean;
-          userOptOut: boolean;
-          hasKeyAndHost: boolean;
-          onboardingSeen?: boolean;
-        };
-        error?: string;
-      }>;
-      setTelemetryEnabled: (enabled: boolean) => Promise<{
-        success: boolean;
-        status?: {
-          enabled: boolean;
-          envDisabled: boolean;
-          userOptOut: boolean;
-          hasKeyAndHost: boolean;
-          onboardingSeen?: boolean;
-        };
-        error?: string;
-      }>;
-      setOnboardingSeen: (flag: boolean) => Promise<{
-        success: boolean;
-        status?: {
-          enabled: boolean;
-          envDisabled: boolean;
-          userOptOut: boolean;
-          hasKeyAndHost: boolean;
-          onboardingSeen?: boolean;
-        };
-        error?: string;
-      }>;
 
       // Filesystem helpers
       fsList: (
@@ -663,12 +619,6 @@ export interface ElectronAPI {
   // App info
   getVersion: () => Promise<string>;
   getPlatform: () => Promise<string>;
-  // Updater
-  checkForUpdates: () => Promise<{ success: boolean; result?: any; error?: string }>;
-  downloadUpdate: () => Promise<{ success: boolean; error?: string }>;
-  quitAndInstallUpdate: () => Promise<{ success: boolean; error?: string }>;
-  openLatestDownload: () => Promise<{ success: boolean; error?: string }>;
-  onUpdateEvent: (listener: (data: { type: string; payload?: any }) => void) => () => void;
 
   // Database recovery
   getDbInitError: () => Promise<{
@@ -820,33 +770,6 @@ export interface ElectronAPI {
   onProviderStatusUpdated?: (
     listener: (data: { providerId: string; status: any }) => void
   ) => () => void;
-  // Telemetry
-  captureTelemetry: (
-    event: string,
-    properties?: Record<string, any>
-  ) => Promise<{ success: boolean; disabled?: boolean; error?: string }>;
-  getTelemetryStatus: () => Promise<{
-    success: boolean;
-    status?: {
-      enabled: boolean;
-      envDisabled: boolean;
-      userOptOut: boolean;
-      hasKeyAndHost: boolean;
-      onboardingSeen?: boolean;
-    };
-    error?: string;
-  }>;
-  setTelemetryEnabled: (enabled: boolean) => Promise<{
-    success: boolean;
-    status?: {
-      enabled: boolean;
-      envDisabled: boolean;
-      userOptOut: boolean;
-      hasKeyAndHost: boolean;
-      onboardingSeen?: boolean;
-    };
-    error?: string;
-  }>;
 
   // Filesystem
   fsList: (

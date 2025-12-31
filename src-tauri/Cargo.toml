@@ -1,6 +1,6 @@
 [package]
 name = "emdash"
-version = "0.4.0"
+version = "0.4.1"
 description = "Emdash desktop app"
 authors = ["Emdash Contributors"]
 edition = "2021"

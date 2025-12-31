@@ -101,8 +101,15 @@ const Titlebar: React.FC<TitlebarProps> = ({
 
   return (
     <>
-      <header className="fixed inset-x-0 top-0 z-[80] flex h-[var(--tb,36px)] items-center justify-end bg-surface/95 pr-3 shadow-[inset_0_-1px_0_hsl(var(--border))] [-webkit-app-region:drag]">
-        <div className="pointer-events-auto flex items-center gap-1 [-webkit-app-region:no-drag]">
+      <header
+        className="fixed inset-x-0 top-0 z-[80] flex h-[var(--tb,36px)] items-center justify-end bg-surface/95 pr-3 shadow-[inset_0_-1px_0_hsl(var(--border))] [-webkit-app-region:drag]"
+        data-tauri-drag-region
+      >
+        <div className="flex-1 h-full" data-tauri-drag-region />
+        <div
+          className="pointer-events-auto flex items-center gap-1 [-webkit-app-region:no-drag]"
+          data-tauri-drag-region="false"
+        >
           {currentPath ? <OpenInMenu path={currentPath} align="right" /> : null}
           {kanbanAvailable ? (
             <TooltipProvider delayDuration={200}>

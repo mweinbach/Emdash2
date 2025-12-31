@@ -19,13 +19,6 @@ type Settings = {
   };
 };
 
-type TelemetryStatus = {
-  enabled: boolean;
-  envDisabled?: boolean;
-  userOptOut?: boolean;
-  hasKeyAndHost?: boolean;
-  onboardingSeen?: boolean;
-};
 
 const DEFAULT_SETTINGS: Settings = {
   repository: {
@@ -57,14 +50,6 @@ const DEFAULT_SETTINGS: Settings = {
   projects: {
     defaultDirectory: '~/emdash-projects',
   },
-};
-
-const DEFAULT_TELEMETRY: TelemetryStatus = {
-  enabled: true,
-  envDisabled: false,
-  userOptOut: false,
-  hasKeyAndHost: false,
-  onboardingSeen: false,
 };
 
 const warned = new Set<string>();
@@ -107,7 +92,6 @@ export function installPlatformBridge() {
   const runtime = shouldInitTauri ? 'tauri' : 'web';
 
   let currentSettings: Settings = { ...DEFAULT_SETTINGS };
-  let telemetry: TelemetryStatus = { ...DEFAULT_TELEMETRY };
 
   const base: Record<string, any> = {
     __runtime: runtime,
@@ -133,21 +117,6 @@ export function installPlatformBridge() {
     dbRetryInit: async () => ({ success: false, error: 'not implemented' }),
     dbBackupAndReset: async () => ({ success: false, error: 'not implemented' }),
     onDbInitError: () => noopCleanup,
-    getTelemetryStatus: async () => ({ success: true, status: telemetry }),
-    setTelemetryEnabled: async (enabled: boolean) => {
-      telemetry = { ...telemetry, enabled: !!enabled, userOptOut: !enabled };
-      return { success: true, status: telemetry };
-    },
-    setOnboardingSeen: async (flag: boolean) => {
-      telemetry = { ...telemetry, onboardingSeen: !!flag };
-      return { success: true, status: telemetry };
-    },
-    captureTelemetry: async () => ({ success: true }),
-    checkForUpdates: async () => ({ success: false, error: 'not implemented' }),
-    downloadUpdate: async () => ({ success: false, error: 'not implemented' }),
-    quitAndInstallUpdate: async () => ({ success: false, error: 'not implemented' }),
-    openLatestDownload: async () => ({ success: false, error: 'not implemented' }),
-    onUpdateEvent: () => noopCleanup,
     ptyStart: async () => ({ ok: false, error: 'not implemented' }),
     ptyInput: () => {},
     ptyResize: () => {},
@@ -310,40 +279,6 @@ export function installPlatformBridge() {
         (window as any).electronAPI.openIn = (args: { app: string; path: string }) =>
           invoke('app_open_in', args);
         (window as any).electronAPI.openProject = () => invoke('project_open');
-        (window as any).electronAPI.checkForUpdates = () => invoke('update_check');
-        (window as any).electronAPI.downloadUpdate = () => invoke('update_download');
-        (window as any).electronAPI.quitAndInstallUpdate = () => invoke('update_quit_and_install');
-        (window as any).electronAPI.openLatestDownload = () => invoke('update_open_latest');
-        (window as any).electronAPI.onUpdateEvent = (
-          listener: (data: { type: string; payload?: any }) => void
-        ) => {
-          const pairs: Array<[string, string]> = [
-            ['update:checking', 'checking'],
-            ['update:available', 'available'],
-            ['update:not-available', 'not-available'],
-            ['update:error', 'error'],
-            ['update:download-progress', 'download-progress'],
-            ['update:downloaded', 'downloaded'],
-          ];
-          const unsubs: Array<() => void> = [];
-          pairs.forEach(([channel, type]) => {
-            const promise = listen(channel, (event) => {
-              listener({ type, payload: event.payload });
-            });
-            promise
-              .then((unlisten) => {
-                unsubs.push(unlisten);
-              })
-              .catch(() => {});
-          });
-          return () => {
-            unsubs.forEach((fn) => {
-              try {
-                fn();
-              } catch {}
-            });
-          };
-        };
         (window as any).electronAPI.ptyStart = (opts: {
           id: string;
           cwd?: string;
@@ -441,15 +376,6 @@ export function installPlatformBridge() {
             promise.then((unlisten) => unlisten()).catch(() => {});
           };
         };
-        (window as any).electronAPI.getTelemetryStatus = () => invoke('telemetry_get_status');
-        (window as any).electronAPI.setTelemetryEnabled = (enabled: boolean) =>
-          invoke('telemetry_set_enabled', { enabled });
-        (window as any).electronAPI.setOnboardingSeen = (flag: boolean) =>
-          invoke('telemetry_set_onboarding_seen', { flag });
-        (window as any).electronAPI.captureTelemetry = (
-          event: string,
-          properties?: Record<string, any>
-        ) => invoke('telemetry_capture', { event, properties });
         (window as any).electronAPI.terminalGetTheme = () => invoke('terminal_get_theme');
         (window as any).electronAPI.githubCheckCLIInstalled = () =>
           invoke('github_check_cli_installed');
