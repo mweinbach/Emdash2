@@ -22,7 +22,13 @@ APPLE_APP_SPECIFIC_PASSWORD="${APPLE_APP_SPECIFIC_PASSWORD:-${APPLE_PASSWORD:-}}
 NOTARIZE_PROFILE="${NOTARIZE_PROFILE:-${APPLE_NOTARY_KEYCHAIN_PROFILE:-}}"
 
 if [[ -z "$MACOS_SIGNING_IDENTITY" ]]; then
-  echo "Missing env: MACOS_SIGNING_IDENTITY (must be a Developer ID Application identity for distribution)" >&2
+  echo "Missing env: MACOS_SIGNING_IDENTITY (recommended: Developer ID Application for distribution; Apple Development works for local testing but may still be blocked on other machines)" >&2
+  exit 1
+fi
+
+if [[ "$MACOS_SIGNING_IDENTITY" == *"Your Name"* || "$MACOS_SIGNING_IDENTITY" == *"TEAMID"* ]]; then
+  echo "MACOS_SIGNING_IDENTITY looks like a placeholder: '$MACOS_SIGNING_IDENTITY'" >&2
+  echo "Run: security find-identity -v -p codesigning" >&2
   exit 1
 fi
 
@@ -44,15 +50,14 @@ cleanup() { rm -rf "$WORK_DIR"; }
 trap cleanup EXIT
 
 echo "Mounting DMG..."
-MOUNT_INFO=$(hdiutil attach "$DMG_PATH" -nobrowse -noverify -noautoopen -plist)
-MOUNT_POINT=$(echo "$MOUNT_INFO" | plutil -extract system-entities xml1 -o - - | xmllint --xpath 'string(//dict/key[.="mount-point"]/following-sibling::*[1])' -)
+MOUNT_POINT=$(hdiutil attach "$DMG_PATH" -nobrowse -noverify -noautoopen | awk '/\/Volumes\//{print $3; exit}')
 
 if [[ -z "$MOUNT_POINT" ]]; then
   echo "Failed to determine mount point for DMG" >&2
   exit 1
 fi
 
-APP_NAME=$(ls -1 "$MOUNT_POINT" | grep -m 1 -E '\\.app$' || true)
+APP_NAME=$(ls -1 "$MOUNT_POINT" | grep -m 1 -E '\.app$' || true)
 
 if [[ -z "$APP_NAME" ]]; then
   echo "Could not find .app inside mounted DMG at $MOUNT_POINT" >&2
@@ -99,7 +104,21 @@ cp -R "$APP_DEST" "$DMG_STAGE/"
 
 hdiutil create -volname "Emdash2" -srcfolder "$DMG_STAGE" -ov -format UDZO "$NOTARIZED_DMG" >/dev/null
 
-echo "Assessing notarized DMG..."
-spctl -a -vv "$NOTARIZED_DMG"
+echo "Assessing app inside notarized DMG..."
+MOUNT_POINT2=$(hdiutil attach "$NOTARIZED_DMG" -nobrowse -noverify -noautoopen | awk '/\/Volumes\//{print $3; exit}')
+if [[ -z "$MOUNT_POINT2" ]]; then
+  echo "Failed to mount notarized DMG for verification" >&2
+  exit 1
+fi
+
+APP_NAME2=$(ls -1 "$MOUNT_POINT2" | grep -m 1 -E '\.app$' || true)
+if [[ -z "$APP_NAME2" ]]; then
+  hdiutil detach "$MOUNT_POINT2" -quiet || true
+  echo "Could not find .app inside notarized DMG at $MOUNT_POINT2" >&2
+  exit 1
+fi
+
+spctl -a -vv "$MOUNT_POINT2/$APP_NAME2"
+hdiutil detach "$MOUNT_POINT2" -quiet || true
 
 echo "Done: $NOTARIZED_DMG"
