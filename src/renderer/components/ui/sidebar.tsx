@@ -206,7 +206,7 @@ const SidebarGroupLabel = React.forwardRef<HTMLDivElement, React.HTMLAttributes<
     <div
       ref={ref}
       className={cn(
-        'px-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground/70',
+        'px-2 text-[10px] font-bold uppercase tracking-[0.05em] text-muted-foreground/60',
         className
       )}
       {...props}
@@ -251,7 +251,7 @@ const SidebarMenuButton = React.forwardRef<HTMLButtonElement, SidebarMenuButtonP
         ref={ref as any}
         data-active={isActive ? 'true' : undefined}
         className={cn(
-          'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 data-[active=true]:bg-accent data-[active=true]:text-accent-foreground',
+          'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium transition-all duration-150 hover:bg-accent/40 hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 data-[active=true]:bg-accent/60 data-[active=true]:text-accent-foreground',
           className
         )}
         {...props}

@@ -2059,8 +2059,7 @@ const AppContent: React.FC = () => {
                   />
                 </ResizablePanel>
                 <ResizableHandle
-                  withHandle
-                  className="hidden cursor-col-resize items-center justify-center transition-colors hover:bg-border/80 lg:flex"
+                  className="hidden lg:flex"
                 />
                 <ResizablePanel
                   className="sidebar-panel sidebar-panel--main"
@@ -2073,8 +2072,7 @@ const AppContent: React.FC = () => {
                   </div>
                 </ResizablePanel>
                 <ResizableHandle
-                  withHandle
-                  className="hidden cursor-col-resize items-center justify-center transition-colors hover:bg-border/80 lg:flex"
+                  className="hidden lg:flex"
                 />
                 <ResizablePanel
                   ref={rightSidebarPanelRef}
