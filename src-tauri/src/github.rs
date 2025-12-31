@@ -15,8 +15,17 @@ use crate::runtime::run_blocking;
 use crate::settings;
 use crate::worktree::{self, WorktreeCreateFromBranchArgs, WorktreeState};
 
-const CLIENT_ID: &str = "Ov23ligC35uHWopzCeWf";
 const SCOPES: &str = "repo read:user read:org";
+const DEFAULT_GITHUB_OAUTH_CLIENT_ID: &str = "Ov23lipoNo51SxLmTDzV";
+
+fn github_oauth_client_id() -> Result<String, String> {
+  let override_id = std::env::var("GITHUB_OAUTH_CLIENT_ID")
+    .ok()
+    .map(|v| v.trim().to_string())
+    .filter(|v| !v.is_empty());
+
+  Ok(override_id.unwrap_or_else(|| DEFAULT_GITHUB_OAUTH_CLIENT_ID.to_string()))
+}
 
 #[derive(Default)]
 pub struct GitHubState {
@@ -234,9 +243,10 @@ fn validate_repo_name(name: &str) -> Result<(), String> {
 }
 
 fn request_device_code() -> Result<DeviceCodeResponse, String> {
+  let client_id = github_oauth_client_id()?;
   let body = format!(
     "client_id={}&scope={}",
-    CLIENT_ID,
+    urlencoding::encode(&client_id),
     urlencoding::encode(SCOPES)
   );
   let response = ureq::post("https://github.com/login/device/code")
@@ -250,9 +260,10 @@ fn request_device_code() -> Result<DeviceCodeResponse, String> {
 }
 
 fn poll_device_token(device_code: &str) -> Result<TokenResponse, String> {
+  let client_id = github_oauth_client_id()?;
   let body = format!(
     "client_id={}&device_code={}&grant_type=urn:ietf:params:oauth:grant-type:device_code",
-    CLIENT_ID,
+    urlencoding::encode(&client_id),
     urlencoding::encode(device_code)
   );
   let response = ureq::post("https://github.com/login/oauth/access_token")
