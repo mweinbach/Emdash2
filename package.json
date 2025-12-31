@@ -10,6 +10,7 @@
     "build": "tauri build",
     "build:renderer": "vite build",
     "build:tauri": "tauri build",
+    "build:macos:release": "./scripts/macos-release.sh",
     "clean": "rm -rf node_modules dist",
     "reset": "bun run clean && bun install",
     "lint": "eslint . --ext .ts,.tsx",
