@@ -76,7 +76,7 @@ const TaskTerminalPanelComponent: React.FC<Props> = ({
   useEffect(() => {
     void (async () => {
       try {
-        const result = await window.electronAPI.terminalGetTheme();
+        const result = await window.desktopAPI.terminalGetTheme();
         if (result?.ok && result.config?.theme) {
           setNativeTheme(result.config.theme);
         }

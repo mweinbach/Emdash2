@@ -21,7 +21,7 @@ const RepositorySettingsCard: React.FC = () => {
 
   const load = useCallback(async () => {
     try {
-      const res = await window.electronAPI.getSettings();
+      const res = await window.desktopAPI.getSettings();
       if (res?.success && res.settings?.repository) {
         const repo = res.settings.repository;
         setSettings({
@@ -45,7 +45,7 @@ const RepositorySettingsCard: React.FC = () => {
       setSaving(true);
       try {
         const next = { ...settings, ...partial };
-        const res = await window.electronAPI.updateSettings({ repository: next });
+        const res = await window.desktopAPI.updateSettings({ repository: next });
         if (res?.success && res.settings?.repository) {
           const repo = res.settings.repository;
           setSettings({

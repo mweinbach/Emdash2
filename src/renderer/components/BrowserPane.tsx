@@ -74,8 +74,8 @@ const BrowserPane: React.FC<{
     if (prev && cur && prev !== cur) {
       try {
         // Clear and hide browser view immediately when switching worktrees
-        (window as any).electronAPI?.browserClear?.();
-        (window as any).electronAPI?.browserHide?.();
+        (window as any).desktopAPI?.browserClear?.();
+        (window as any).desktopAPI?.browserHide?.();
         setRunning(prev, false);
         // Reset task URL tracking to force reload
         lastTaskUrlRef.current = null;
@@ -84,7 +84,7 @@ const BrowserPane: React.FC<{
 
     try {
       // Stop all other preview servers except the new current (if any)
-      (window as any).electronAPI?.hostPreviewStopAll?.(cur || '');
+      (window as any).desktopAPI?.hostPreviewStopAll?.(cur || '');
     } catch {}
 
     if (prev !== cur) {
@@ -100,7 +100,7 @@ const BrowserPane: React.FC<{
   }, [taskId, clearUrl, hideSpinner]);
 
   React.useEffect(() => {
-    const off = (window as any).electronAPI?.onHostPreviewEvent?.((data: any) => {
+    const off = (window as any).desktopAPI?.onHostPreviewEvent?.((data: any) => {
       try {
         if (!data || !taskId || data.taskId !== taskId) return;
         if (data.type === 'setup') {
@@ -165,7 +165,7 @@ const BrowserPane: React.FC<{
         let isReachable = false;
         while (!cancelled && Date.now() < deadline) {
           try {
-            const res = await (window as any).electronAPI?.netProbePorts?.(
+            const res = await (window as any).desktopAPI?.netProbePorts?.(
               host,
               [port],
               PROBE_TIMEOUT_MS
@@ -197,7 +197,7 @@ const BrowserPane: React.FC<{
     if (!url) return;
     showSpinner();
     try {
-      (window as any).electronAPI?.browserReload?.();
+      (window as any).desktopAPI?.browserReload?.();
     } catch {}
   }, [url, showSpinner]);
 
@@ -248,7 +248,7 @@ const BrowserPane: React.FC<{
     if (!shouldShow) {
       visibilityTimeoutRef.current = setTimeout(() => {
         try {
-          (window as any).electronAPI?.browserHide?.();
+          (window as any).desktopAPI?.browserHide?.();
           lastBoundsRef.current = null;
         } catch {}
         visibilityTimeoutRef.current = null;
@@ -262,14 +262,14 @@ const BrowserPane: React.FC<{
         if (hasBoundsChanged(bounds)) {
           lastBoundsRef.current = bounds;
           try {
-            (window as any).electronAPI?.browserShow?.(bounds, url || undefined);
+            (window as any).desktopAPI?.browserShow?.(bounds, url || undefined);
             setTimeout(() => {
               const updatedBounds = computeBounds();
               if (updatedBounds && updatedBounds.width > 0 && updatedBounds.height > 0) {
                 if (hasBoundsChanged(updatedBounds)) {
                   lastBoundsRef.current = updatedBounds;
                   try {
-                    (window as any).electronAPI?.browserSetBounds?.(updatedBounds);
+                    (window as any).desktopAPI?.browserSetBounds?.(updatedBounds);
                   } catch {}
                 }
               }
@@ -285,7 +285,7 @@ const BrowserPane: React.FC<{
         if (hasBoundsChanged(bounds)) {
           lastBoundsRef.current = bounds;
           try {
-            (window as any).electronAPI?.browserSetBounds?.(bounds);
+            (window as any).desktopAPI?.browserSetBounds?.(bounds);
           } catch {}
         }
       }
@@ -301,7 +301,7 @@ const BrowserPane: React.FC<{
         visibilityTimeoutRef.current = null;
       }
       try {
-        (window as any).electronAPI?.browserHide?.();
+        (window as any).desktopAPI?.browserHide?.();
       } catch {}
       window.removeEventListener('resize', onResize);
       try {
@@ -332,13 +332,13 @@ const BrowserPane: React.FC<{
         lastTaskUrlRef.current = taskUrlKey;
 
         try {
-          (window as any).electronAPI?.browserClear?.();
+          (window as any).desktopAPI?.browserClear?.();
         } catch {}
 
         const timeoutId = setTimeout(() => {
           try {
             // Force reload when task changes to ensure fresh content
-            (window as any).electronAPI?.browserLoadURL?.(url, isTaskChange);
+            (window as any).desktopAPI?.browserLoadURL?.(url, isTaskChange);
           } catch {}
         }, URL_LOAD_DELAY_MS);
         return () => clearTimeout(timeoutId);
@@ -404,10 +404,10 @@ const BrowserPane: React.FC<{
     if (!url) return;
     try {
       // Clear and reload to force fresh content
-      (window as any).electronAPI?.browserClear?.();
+      (window as any).desktopAPI?.browserClear?.();
       setTimeout(() => {
         try {
-          (window as any).electronAPI?.browserLoadURL?.(url, true);
+          (window as any).desktopAPI?.browserLoadURL?.(url, true);
         } catch {}
       }, 100);
     } catch {}
@@ -419,10 +419,10 @@ const BrowserPane: React.FC<{
     });
     try {
       const id = (taskId || '').trim();
-      if (id) (window as any).electronAPI?.hostPreviewStop?.(id);
+      if (id) (window as any).desktopAPI?.hostPreviewStop?.(id);
     } catch {}
     try {
-      (window as any).electronAPI?.browserHide?.();
+      (window as any).desktopAPI?.browserHide?.();
     } catch {}
     try {
       clearUrl();
@@ -515,7 +515,7 @@ const BrowserPane: React.FC<{
           <button
             className="inline-flex h-6 items-center gap-1 rounded border border-border px-2 text-xs hover:bg-muted"
             title="Open in system browser"
-            onClick={() => address && window.electronAPI.openExternal(address)}
+            onClick={() => address && window.desktopAPI.openExternal(address)}
           >
             <ExternalLink className="h-3.5 w-3.5" />
           </button>

@@ -47,7 +47,7 @@ fn app_get_platform() -> String {
 }
 
 #[tauri::command]
-fn app_get_electron_version() -> String {
+fn app_get_runtime_version() -> String {
   format!("tauri-{}", tauri::VERSION)
 }
 
@@ -135,7 +135,7 @@ fn main() {
     .invoke_handler(tauri::generate_handler![
       app_get_version,
       app_get_platform,
-      app_get_electron_version,
+      app_get_runtime_version,
       app_open_external,
       app_open_in,
       project_open,

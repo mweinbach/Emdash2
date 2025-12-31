@@ -14,7 +14,7 @@ class ActivityStore {
   private ensureSubscribed() {
     if (this.subscribed) return;
     this.subscribed = true;
-    const api: any = (window as any).electronAPI;
+    const api: any = (window as any).desktopAPI;
     api?.onPtyActivity?.((info: { id: string; chunk?: string }) => {
       try {
         const id = String(info?.id || '');
@@ -117,7 +117,7 @@ class ActivityStore {
     // Fallback: also listen directly to this task's main PTY data in case global broadcast is missing
     const offDirect: Array<() => void> = [];
     try {
-      const api: any = (window as any).electronAPI;
+      const api: any = (window as any).desktopAPI;
       const providers = [
         'qwen',
         'codex',

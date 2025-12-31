@@ -151,7 +151,7 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
     if (!githubProfileUrl || typeof window === 'undefined') {
       return;
     }
-    const api = (window as any).electronAPI;
+    const api = (window as any).desktopAPI;
     api?.openExternal?.(githubProfileUrl);
   }, [githubProfileUrl]);
 

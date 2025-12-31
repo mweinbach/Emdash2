@@ -107,13 +107,13 @@ export class TerminalSessionManager {
               captureTelemetry('terminal_command_executed');
             })();
           }
-          window.electronAPI.ptyInput({ id: this.id, data: filtered });
+          window.desktopAPI.ptyInput({ id: this.id, data: filtered });
         }
       }
     });
     const resizeDisposable = this.terminal.onResize(({ cols, rows }) => {
       if (!this.disposed) {
-        window.electronAPI.ptyResize({ id: this.id, cols, rows });
+        window.desktopAPI.ptyResize({ id: this.id, cols, rows });
       }
     });
     this.disposables.push(
@@ -192,7 +192,7 @@ export class TerminalSessionManager {
     // Clean up stored viewport position when session is disposed
     viewportPositions.delete(this.id);
     try {
-      window.electronAPI.ptyKill(this.id);
+      window.desktopAPI.ptyKill(this.id);
     } catch (error) {
       log.warn('Failed to kill PTY during dispose', { id: this.id, error });
     }
@@ -447,7 +447,7 @@ export class TerminalSessionManager {
     const { taskId, cwd, shell, env, initialSize, autoApprove, initialPrompt } = this.options;
     const id = taskId;
     const providerCommand = this.buildProviderCommand(shell);
-    void window.electronAPI
+    void window.desktopAPI
       .ptyStart({
         id,
         cwd,
@@ -466,7 +466,7 @@ export class TerminalSessionManager {
           this.sendSizeIfStarted();
           this.emitReady();
           try {
-            const offStarted = window.electronAPI.onPtyStarted?.((payload: { id: string }) => {
+            const offStarted = window.desktopAPI.onPtyStarted?.((payload: { id: string }) => {
               if (payload?.id === id) {
                 this.ptyStarted = true;
                 this.sendSizeIfStarted();
@@ -486,7 +486,7 @@ export class TerminalSessionManager {
         this.emitError(message);
       });
 
-    const offData = window.electronAPI.onPtyData(id, (chunk) => {
+    const offData = window.desktopAPI.onPtyData(id, (chunk) => {
       if (!this.metrics.canAccept(chunk)) {
         log.warn('Terminal scrollback truncated to protect memory', { id });
         this.terminal.clear();
@@ -503,7 +503,7 @@ export class TerminalSessionManager {
       } catch {}
     });
 
-    const offExit = window.electronAPI.onPtyExit(id, (info) => {
+    const offExit = window.desktopAPI.onPtyExit(id, (info) => {
       this.metrics.recordExit(info);
       this.ptyStarted = false;
       this.emitExit(info);
@@ -577,10 +577,10 @@ export class TerminalSessionManager {
   }
 
   private async restoreSnapshot(): Promise<void> {
-    if (!window.electronAPI.ptyGetSnapshot) return;
+    if (!window.desktopAPI.ptyGetSnapshot) return;
 
     try {
-      const response = await window.electronAPI.ptyGetSnapshot({ id: this.id });
+      const response = await window.desktopAPI.ptyGetSnapshot({ id: this.id });
       const snapshotPayload = response?.ok ? response.snapshot : null;
       this.hasSnapshot = Boolean(snapshotPayload?.data);
       if (!snapshotPayload?.data) return;
@@ -646,7 +646,7 @@ export class TerminalSessionManager {
   }
 
   private captureSnapshot(reason: 'interval' | 'detach' | 'dispose'): Promise<void> {
-    if (!window.electronAPI.ptySaveSnapshot) return Promise.resolve();
+    if (!window.desktopAPI.ptySaveSnapshot) return Promise.resolve();
     if (this.disposed) return Promise.resolve();
     if (reason === 'detach' && this.lastSnapshotReason === 'detach' && this.lastSnapshotAt) {
       const elapsed = Date.now() - this.lastSnapshotAt;
@@ -668,7 +668,7 @@ export class TerminalSessionManager {
           stats: { ...this.metrics.snapshot(), reason },
         };
 
-        const result = await window.electronAPI.ptySaveSnapshot({
+        const result = await window.desktopAPI.ptySaveSnapshot({
           id: this.id,
           payload,
         });
@@ -739,7 +739,7 @@ export class TerminalSessionManager {
   private sendSizeIfStarted() {
     if (!this.ptyStarted || this.disposed) return;
     try {
-      window.electronAPI.ptyResize({
+      window.desktopAPI.ptyResize({
         id: this.id,
         cols: this.terminal.cols,
         rows: this.terminal.rows,

@@ -15,7 +15,7 @@
     "@typescript-eslint/explicit-module-boundary-types": "off",
     "@typescript-eslint/no-empty-function": "off",
     "prefer-const": "warn",
-    "react-hooks/set-state-in-effect": "warn"
+    "react-hooks/exhaustive-deps": "warn"
   },
   "overrides": [],
   "env": {

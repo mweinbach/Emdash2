@@ -45,7 +45,7 @@ const Context7Tooltip: React.FC<Props> = ({ enabled }) => {
           <button
             type="button"
             onClick={() =>
-              (window as any).electronAPI?.openExternal?.(CONTEXT7_INTEGRATION.docsUrl)
+              (window as any).desktopAPI?.openExternal?.(CONTEXT7_INTEGRATION.docsUrl)
             }
             className="text-[11px] text-muted-foreground underline-offset-2 hover:underline"
           >

@@ -109,9 +109,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     };
 
     const loadCachedStatuses = async () => {
-      if (!window?.electronAPI?.getProviderStatuses) return;
+      if (!window?.desktopAPI?.getProviderStatuses) return;
       try {
-        const result = await window.electronAPI.getProviderStatuses();
+        const result = await window.desktopAPI.getProviderStatuses();
         if (cancelled) return;
         if (result?.success && result.statuses) {
           applyCachedStatuses(result.statuses);
@@ -124,7 +124,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     };
 
     const off =
-      window?.electronAPI?.onProviderStatusUpdated?.(
+      window?.desktopAPI?.onProviderStatusUpdated?.(
         (payload: { providerId: string; status: CachedProviderStatus }) => {
           if (!payload?.providerId || !payload.status) return;
           applyCachedStatuses({ [payload.providerId]: payload.status });
@@ -140,7 +140,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   }, []);
 
   const fetchCliProviders = useCallback(async () => {
-    if (!window?.electronAPI?.getProviderStatuses) {
+    if (!window?.desktopAPI?.getProviderStatuses) {
       setCliProviders(createDefaultCliProviders());
       setCliError('Provider status detection is unavailable in this build.');
       return;
@@ -150,7 +150,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     setCliError(null);
 
     try {
-      const result = await window.electronAPI.getProviderStatuses({ refresh: true });
+      const result = await window.desktopAPI.getProviderStatuses({ refresh: true });
       if (result?.success && result.statuses) {
         const providers = mapProviderStatusesToCli(result.statuses);
         setCliProviders((prev) => mergeCliProviders([...prev, ...providers]));
@@ -188,7 +188,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                   size="sm"
                   className="h-auto px-0 text-xs"
                   onClick={() =>
-                    window.electronAPI.openExternal(
+                    window.desktopAPI.openExternal(
                       'https://x.com/rabanspiegel/status/1991220598538924097?s=20'
                     )
                   }

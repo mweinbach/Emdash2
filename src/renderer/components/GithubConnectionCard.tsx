@@ -32,7 +32,7 @@ const GithubConnectionCard: React.FC<GithubConnectionCardProps> = ({ onStatusCha
 
   useEffect(() => {
     // Check if CLI is installed on mount
-    window.electronAPI.githubCheckCLIInstalled().then(setCLIInstalled);
+    window.desktopAPI.githubCheckCLIInstalled().then(setCLIInstalled);
   }, []);
 
   useEffect(() => {
@@ -51,14 +51,14 @@ const GithubConnectionCard: React.FC<GithubConnectionCardProps> = ({ onStatusCha
     setIsError(false);
 
     // Check if gh CLI is installed
-    const cliPresent = await window.electronAPI.githubCheckCLIInstalled();
+    const cliPresent = await window.desktopAPI.githubCheckCLIInstalled();
 
     if (!cliPresent) {
       // Offer to install
       setMessage('GitHub CLI not found. Installing...');
       setIsInstalling(true);
 
-      const installResult = await window.electronAPI.githubInstallCLI();
+      const installResult = await window.desktopAPI.githubInstallCLI();
       setIsInstalling(false);
 
       if (!installResult.success) {
@@ -114,7 +114,7 @@ const GithubConnectionCard: React.FC<GithubConnectionCardProps> = ({ onStatusCha
 
   const handleInstall = useCallback(async () => {
     try {
-      await window.electronAPI.openExternal(INSTALL_URL);
+      await window.desktopAPI.openExternal(INSTALL_URL);
     } catch (error) {
       console.error('Failed to open GitHub CLI install docs:', error);
     }

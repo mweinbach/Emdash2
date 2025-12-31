@@ -63,7 +63,7 @@ export function usePtyBusy(ptyId?: string, provider?: string) {
       return;
     }
 
-    const api: any = (window as any).electronAPI;
+    const api: any = (window as any).desktopAPI;
     if (!api?.onPtyData) {
       setBusy(false);
       return;

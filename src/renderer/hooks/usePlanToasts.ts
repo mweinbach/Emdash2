@@ -5,7 +5,7 @@ export function usePlanToasts() {
   const { toast } = useToast();
 
   useEffect(() => {
-    const off = (window as any).electronAPI.onPlanEvent?.((evt: any) => {
+    const off = (window as any).desktopAPI.onPlanEvent?.((evt: any) => {
       if (!evt || !evt.type) return;
       if (evt.type === 'write_blocked') {
         toast({

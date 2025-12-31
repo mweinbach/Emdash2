@@ -287,7 +287,7 @@ function closeTerminal(taskId: string, terminalId: string, taskPath?: string) {
   });
 
   try {
-    const api: any = (window as any).electronAPI;
+    const api: any = (window as any).desktopAPI;
     api?.ptyKill?.(terminalId);
   } catch {
     // ignore kill errors

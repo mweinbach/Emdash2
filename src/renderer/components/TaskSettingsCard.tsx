@@ -13,7 +13,7 @@ const TaskSettingsCard: React.FC = () => {
     let cancelled = false;
     (async () => {
       try {
-        const result = await window.electronAPI.getSettings();
+        const result = await window.desktopAPI.getSettings();
         if (cancelled) return;
         if (result.success) {
           setAutoGenerateName(result.settings?.tasks?.autoGenerateName ?? true);
@@ -41,7 +41,7 @@ const TaskSettingsCard: React.FC = () => {
     setError(null);
     setSaving(true);
     try {
-      const result = await window.electronAPI.updateSettings({ tasks: { autoGenerateName: next } });
+      const result = await window.desktopAPI.updateSettings({ tasks: { autoGenerateName: next } });
       if (!result.success) {
         throw new Error(result.error || 'Failed to update settings.');
       }
@@ -62,7 +62,7 @@ const TaskSettingsCard: React.FC = () => {
     setError(null);
     setSaving(true);
     try {
-      const result = await window.electronAPI.updateSettings({
+      const result = await window.desktopAPI.updateSettings({
         tasks: { autoApproveByDefault: next },
       });
       if (!result.success) {

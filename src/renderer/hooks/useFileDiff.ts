@@ -18,7 +18,7 @@ export function useFileDiff(
       setLoading(true);
       setError(null);
       try {
-        const res = await window.electronAPI.getFileDiff({ taskPath, filePath });
+        const res = await window.desktopAPI.getFileDiff({ taskPath, filePath });
         if (!cancelled) {
           if (res?.success && res.diff) setLines(res.diff.lines);
           else setError(res?.error || 'Failed to load diff');

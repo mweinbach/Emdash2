@@ -137,7 +137,7 @@ export const CloneFromUrlModal: React.FC<CloneFromUrlModalProps> = ({
 
       try {
         // Get default directory from settings
-        const settingsResult = await window.electronAPI.getSettings();
+        const settingsResult = await window.desktopAPI.getSettings();
         const defaultDir =
           settingsResult.success && settingsResult.settings?.projects?.defaultDirectory
             ? settingsResult.settings.projects.defaultDirectory
@@ -146,7 +146,7 @@ export const CloneFromUrlModal: React.FC<CloneFromUrlModalProps> = ({
 
         setProgress(`Cloning to ${localPath}...`);
 
-        const cloneResult = await window.electronAPI.githubCloneRepository(cleanedUrl, localPath);
+        const cloneResult = await window.desktopAPI.githubCloneRepository(cleanedUrl, localPath);
 
         if (!cloneResult.success) {
           throw new Error(cloneResult.error || 'Failed to clone repository');

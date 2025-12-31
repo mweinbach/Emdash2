@@ -209,7 +209,7 @@ const TaskModal: React.FC<TaskModalProps> = ({
     applySuggestedName();
 
     let cancel = false;
-    window.electronAPI.getSettings().then((res) => {
+    window.desktopAPI.getSettings().then((res) => {
       if (cancel) return;
       const settings = res?.success ? res.settings : undefined;
 
@@ -255,7 +255,7 @@ const TaskModal: React.FC<TaskModalProps> = ({
   useEffect(() => {
     if (!isOpen) return;
     let cancel = false;
-    const api: any = (window as any).electronAPI;
+    const api: any = (window as any).desktopAPI;
     if (!api?.linearCheckConnection) {
       setIsLinearConnected(false);
       return;
@@ -277,7 +277,7 @@ const TaskModal: React.FC<TaskModalProps> = ({
   useEffect(() => {
     if (!isOpen) return;
     let cancel = false;
-    const api: any = (window as any).electronAPI;
+    const api: any = (window as any).desktopAPI;
     api
       ?.jiraCheckConnection?.()
       .then((res: any) => {
@@ -293,13 +293,13 @@ const TaskModal: React.FC<TaskModalProps> = ({
 
   const handleLinearConnect = useCallback(async () => {
     const trimmedKey = linearApiKey.trim();
-    if (!trimmedKey || !window?.electronAPI?.linearSaveToken) {
+    if (!trimmedKey || !window?.desktopAPI?.linearSaveToken) {
       return;
     }
 
     setLinearConnectionError(null);
     try {
-      const result = await window.electronAPI.linearSaveToken(trimmedKey);
+      const result = await window.desktopAPI.linearSaveToken(trimmedKey);
       if (result?.success) {
         setIsLinearConnected(true);
         setLinearSetupOpen(false);
@@ -318,7 +318,7 @@ const TaskModal: React.FC<TaskModalProps> = ({
   const handleGithubConnect = useCallback(async () => {
     if (!githubInstalled) {
       try {
-        await window.electronAPI.openExternal('https://cli.github.com/manual/installation');
+        await window.desktopAPI.openExternal('https://cli.github.com/manual/installation');
       } catch (error) {
         console.error('Failed to open GitHub CLI install docs:', error);
       }
@@ -337,7 +337,7 @@ const TaskModal: React.FC<TaskModalProps> = ({
   const handleJiraConnect = useCallback(async () => {
     try {
       setJiraConnectionError(null);
-      const api: any = (window as any).electronAPI;
+      const api: any = (window as any).desktopAPI;
       const res = await api?.jiraSaveCredentials?.({
         siteUrl: jiraSite.trim(),
         email: jiraEmail.trim(),

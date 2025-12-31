@@ -14,10 +14,10 @@ export {};
 
 declare global {
   interface Window {
-    electronAPI: {
+    desktopAPI: {
       // App info
       getAppVersion: () => Promise<string>;
-      getElectronVersion: () => Promise<string>;
+      getRuntimeVersion: () => Promise<string>;
       getPlatform: () => Promise<string>;
 
       // App settings
@@ -615,7 +615,7 @@ declare global {
 }
 
 // Explicit type export for better TypeScript recognition
-export interface ElectronAPI {
+export interface DesktopAPI {
   // App info
   getVersion: () => Promise<string>;
   getPlatform: () => Promise<string>;

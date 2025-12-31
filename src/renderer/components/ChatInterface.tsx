@@ -27,7 +27,7 @@ import { useAutoScrollOnTaskSwitch } from '@/hooks/useAutoScrollOnTaskSwitch';
 import { terminalSessionRegistry } from '../terminal/SessionRegistry';
 
 declare const window: Window & {
-  electronAPI: {
+  desktopAPI: {
     saveMessage: (message: any) => Promise<{ success: boolean; error?: string }>;
   };
 };
@@ -106,7 +106,7 @@ const ChatInterface: React.FC<Props> = ({
 
     const send = () => {
       try {
-        (window as any).electronAPI?.ptyInput?.({
+        (window as any).desktopAPI?.ptyInput?.({
           id: terminalId,
           data: `${meta.autoStartCommand}\n`,
         });
@@ -116,7 +116,7 @@ const ChatInterface: React.FC<Props> = ({
       } catch {}
     };
 
-    const api: any = (window as any).electronAPI;
+    const api: any = (window as any).desktopAPI;
     let off: (() => void) | null = null;
     try {
       off = api?.onPtyStarted?.((info: { id: string }) => {
@@ -142,7 +142,7 @@ const ChatInterface: React.FC<Props> = ({
 
   const runInstallCommand = useCallback(
     (cmd: string) => {
-      const api: any = (window as any).electronAPI;
+      const api: any = (window as any).desktopAPI;
       const targetId = activeTerminalId;
       if (!targetId) return;
 
@@ -250,7 +250,7 @@ const ChatInterface: React.FC<Props> = ({
   useEffect(() => {
     let cancelled = false;
     let missingCheckRequested = false;
-    const api: any = (window as any).electronAPI;
+    const api: any = (window as any).desktopAPI;
 
     const applyStatuses = (statuses: Record<string, any> | undefined | null) => {
       if (!statuses) return;
@@ -319,7 +319,7 @@ const ChatInterface: React.FC<Props> = ({
   // If we don't even have a cached status entry for the current provider, pessimistically
   // show the install banner and kick off a background refresh to populate it.
   useEffect(() => {
-    const api: any = (window as any).electronAPI;
+    const api: any = (window as any).desktopAPI;
     if (!api?.getProviderStatuses) {
       setIsProviderInstalled(false);
       return;
@@ -509,7 +509,7 @@ const ChatInterface: React.FC<Props> = ({
         let cancelled = false;
         (async () => {
           try {
-            const api: any = (window as any).electronAPI;
+            const api: any = (window as any).desktopAPI;
             if (!api?.resolveServiceIcon) return;
             // Allow network fetch in production to populate cache/offline use
             const res = await api.resolveServiceIcon({
@@ -581,7 +581,7 @@ const ChatInterface: React.FC<Props> = ({
                   <button
                     type="button"
                     className="inline-flex items-center rounded border border-primary/60 px-2 py-1 text-xs font-medium text-primary hover:bg-primary/10"
-                    onClick={() => window.electronAPI.openExternal(state.previewUrl!)}
+                    onClick={() => window.desktopAPI.openExternal(state.previewUrl!)}
                     aria-label="Open preview (external)"
                     title="Open preview"
                   >
@@ -678,7 +678,7 @@ const ChatInterface: React.FC<Props> = ({
                     terminalId={terminalId}
                     installCommand={getInstallCommandForProvider(provider as any)}
                     onRunInstall={runInstallCommand}
-                    onOpenExternal={(url) => window.electronAPI.openExternal(url)}
+                    onOpenExternal={(url) => window.desktopAPI.openExternal(url)}
                   />
                 );
               }
@@ -688,7 +688,7 @@ const ChatInterface: React.FC<Props> = ({
                     provider={provider as any}
                     terminalId={terminalId}
                     onRunInstall={runInstallCommand}
-                    onOpenExternal={(url) => window.electronAPI.openExternal(url)}
+                    onOpenExternal={(url) => window.desktopAPI.openExternal(url)}
                   />
                 );
               }
@@ -737,7 +737,7 @@ const ChatInterface: React.FC<Props> = ({
                 setCliStartFailed(false);
                 // Mark initial injection as sent so it won't re-run on restart
                 if (initialInjection && !task.metadata?.initialInjectionSent) {
-                  void window.electronAPI.saveTask({
+                  void window.desktopAPI.saveTask({
                     ...task,
                     metadata: {
                       ...task.metadata,

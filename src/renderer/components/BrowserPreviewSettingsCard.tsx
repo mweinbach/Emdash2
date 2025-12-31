@@ -15,7 +15,7 @@ export default function BrowserPreviewSettingsCard() {
   React.useEffect(() => {
     (async () => {
       try {
-        const s = await (window as any).electronAPI?.getSettings?.();
+        const s = await (window as any).desktopAPI?.getSettings?.();
         const en = Boolean(s?.browserPreview?.enabled ?? true);
         setEnabled(en);
       } catch {}
@@ -26,7 +26,7 @@ export default function BrowserPreviewSettingsCard() {
   const update = async (next: boolean) => {
     setEnabled(next);
     try {
-      await (window as any).electronAPI?.updateSettings?.({ browserPreview: { enabled: next } });
+      await (window as any).desktopAPI?.updateSettings?.({ browserPreview: { enabled: next } });
     } catch {}
   };
 

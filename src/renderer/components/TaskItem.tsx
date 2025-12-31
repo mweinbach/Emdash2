@@ -70,7 +70,7 @@ export const TaskItem: React.FC<TaskItemProps> = ({ task, onDelete, showDelete }
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (pr.url) window.electronAPI.openExternal(pr.url);
+                  if (pr.url) window.desktopAPI.openExternal(pr.url);
                 }}
                 className="inline-flex items-center gap-1 rounded border border-border bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
                 title={`${pr.title || 'Pull Request'} (#${pr.number})`}

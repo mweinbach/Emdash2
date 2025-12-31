@@ -14,7 +14,7 @@ export const DeletePrNotice: React.FC<Props> = ({ tasks }) => {
   const handleOpen = (url?: string) => {
     if (!url) return;
     try {
-      window.electronAPI.openExternal(url);
+      window.desktopAPI.openExternal(url);
     } catch {}
   };
 

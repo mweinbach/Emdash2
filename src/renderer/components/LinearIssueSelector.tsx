@@ -39,7 +39,7 @@ export const LinearIssueSelector: React.FC<LinearIssueSelectorProps> = ({
   const [visibleCount, setVisibleCount] = useState(10);
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
-  const canListLinear = typeof window !== 'undefined' && !!window.electronAPI?.linearInitialFetch;
+  const canListLinear = typeof window !== 'undefined' && !!window.desktopAPI?.linearInitialFetch;
   const issuesLoaded = availableIssues.length > 0;
   const isDisabled = disabled || isLoadingIssues || !!issueListError || !issuesLoaded;
 
@@ -81,7 +81,7 @@ export const LinearIssueSelector: React.FC<LinearIssueSelectorProps> = ({
       return;
     }
 
-    const api = window.electronAPI;
+    const api = window.desktopAPI;
     if (!api?.linearInitialFetch) {
       setAvailableIssues([]);
       setIssueListError('Linear issue list unavailable in this build.');
@@ -122,7 +122,7 @@ export const LinearIssueSelector: React.FC<LinearIssueSelectorProps> = ({
       return;
     }
 
-    const api = window.electronAPI;
+    const api = window.desktopAPI;
     if (!api?.linearSearchIssues) {
       return;
     }

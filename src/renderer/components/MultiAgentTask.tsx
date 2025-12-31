@@ -165,11 +165,11 @@ const MultiAgentTask: React.FC<Props> = ({ task }) => {
     const send = () => {
       if (sent) return;
       try {
-        (window as any).electronAPI?.ptyInput?.({ id: ptyId, data: trimmed + '\n' });
+        (window as any).desktopAPI?.ptyInput?.({ id: ptyId, data: trimmed + '\n' });
         sent = true;
       } catch {}
     };
-    const offData = (window as any).electronAPI?.onPtyData?.(ptyId, (chunk: string) => {
+    const offData = (window as any).desktopAPI?.onPtyData?.(ptyId, (chunk: string) => {
       if (silenceTimer) clearTimeout(silenceTimer);
       silenceTimer = setTimeout(() => {
         if (!sent) send();
@@ -181,7 +181,7 @@ const MultiAgentTask: React.FC<Props> = ({ task }) => {
         }
       } catch {}
     });
-    const offStarted = (window as any).electronAPI?.onPtyStarted?.((info: { id: string }) => {
+    const offStarted = (window as any).desktopAPI?.onPtyStarted?.((info: { id: string }) => {
       if (info?.id === ptyId) {
         if (silenceTimer) clearTimeout(silenceTimer);
         silenceTimer = setTimeout(() => {
@@ -298,7 +298,7 @@ const MultiAgentTask: React.FC<Props> = ({ task }) => {
       const ptyId = `${variant.worktreeId}-main`;
       busyState.set(variantId, variantBusy[variantId] ?? false);
 
-      const offData = (window as any).electronAPI?.onPtyData?.(ptyId, (chunk: string) => {
+      const offData = (window as any).desktopAPI?.onPtyData?.(ptyId, (chunk: string) => {
         try {
           const signal = classifyActivity(variant.provider, chunk || '');
           if (signal === 'busy') setBusy(variantId, true);
@@ -310,7 +310,7 @@ const MultiAgentTask: React.FC<Props> = ({ task }) => {
       });
       if (offData) cleanups.push(offData);
 
-      const offExit = (window as any).electronAPI?.onPtyExit?.(ptyId, () => {
+      const offExit = (window as any).desktopAPI?.onPtyExit?.(ptyId, () => {
         setBusy(variantId, false);
       });
       if (offExit) cleanups.push(offExit);
@@ -472,7 +472,7 @@ const MultiAgentTask: React.FC<Props> = ({ task }) => {
                       }
                       // Mark initial injection as sent so it won't re-run on restart
                       if (initialInjection && !task.metadata?.initialInjectionSent) {
-                        void window.electronAPI.saveTask({
+                        void window.desktopAPI.saveTask({
                           ...task,
                           metadata: {
                             ...task.metadata,

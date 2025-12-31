@@ -97,7 +97,7 @@ const ActiveRuns: React.FC<Props> = ({ projects, onSelectProject, onSelectTask }
                         aria-label="Open preview"
                         onClick={(e) => {
                           e.stopPropagation();
-                          window.electronAPI.openExternal(previewUrl);
+                          window.desktopAPI.openExternal(previewUrl);
                         }}
                       >
                         <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
@@ -111,7 +111,7 @@ const ActiveRuns: React.FC<Props> = ({ projects, onSelectProject, onSelectTask }
                       onClick={async (e) => {
                         e.stopPropagation();
                         try {
-                          await (window as any).electronAPI.stopContainerRun?.(s.taskId);
+                          await (window as any).desktopAPI.stopContainerRun?.(s.taskId);
                         } catch {}
                       }}
                     >

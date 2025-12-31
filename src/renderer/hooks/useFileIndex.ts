@@ -18,7 +18,7 @@ export function useFileIndex(rootPath: string | undefined) {
     setError(null);
     (async () => {
       try {
-        const res = await window.electronAPI.fsList(rootPath, {
+        const res = await window.desktopAPI.fsList(rootPath, {
           includeDirs: true,
           maxEntries: 5000,
         });
@@ -41,7 +41,7 @@ export function useFileIndex(rootPath: string | undefined) {
     setLoading(true);
     setError(null);
     try {
-      const res = await window.electronAPI.fsList(rootPath, {
+      const res = await window.desktopAPI.fsList(rootPath, {
         includeDirs: true,
         maxEntries: 5000,
       });

@@ -38,7 +38,7 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({ isOpen, onClos
     let cancel = false;
     (async () => {
       try {
-        const result = await window.electronAPI.githubGetOwners();
+        const result = await window.desktopAPI.githubGetOwners();
         if (cancel) return;
         if (result.success && result.owners) {
           setOwners(result.owners);
@@ -87,7 +87,7 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({ isOpen, onClos
     setIsValidating(true);
     validationTimeoutRef.current = setTimeout(async () => {
       try {
-        const result = await window.electronAPI.githubValidateRepoName(repoName.trim(), owner);
+        const result = await window.desktopAPI.githubValidateRepoName(repoName.trim(), owner);
         setIsValidating(false);
         if (!result.success || !result.valid) {
           setValidationError(result.error || 'Invalid repository name');
@@ -134,7 +134,7 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({ isOpen, onClos
       setProgress('Creating repository on GitHub...');
 
       try {
-        const result = await window.electronAPI.githubCreateNewProject({
+        const result = await window.desktopAPI.githubCreateNewProject({
           name: repoName.trim(),
           description: description.trim() || undefined,
           owner,

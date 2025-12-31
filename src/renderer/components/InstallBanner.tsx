@@ -35,7 +35,7 @@ export const InstallBanner: React.FC<Props> = ({
     }
     if (!terminalId) return;
     try {
-      window.electronAPI?.ptyInput?.({ id: terminalId, data: `${command}\n` });
+      window.desktopAPI?.ptyInput?.({ id: terminalId, data: `${command}\n` });
     } catch (error) {
       console.error('Failed to run install command', error);
     }

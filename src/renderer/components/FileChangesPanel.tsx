@@ -70,7 +70,7 @@ const FileChangesPanelComponent: React.FC<FileChangesPanelProps> = ({
       }
       setBranchStatusLoading(true);
       try {
-        const res = await window.electronAPI.getBranchStatus({ taskPath: taskId });
+        const res = await window.desktopAPI.getBranchStatus({ taskPath: taskId });
         if (!cancelled) {
           setBranchAhead(res?.success ? (res?.ahead ?? 0) : 0);
         }
@@ -96,7 +96,7 @@ const FileChangesPanelComponent: React.FC<FileChangesPanelProps> = ({
     setStagingFiles((prev) => new Set(prev).add(filePath));
 
     try {
-      const result = await window.electronAPI.stageFile({
+      const result = await window.desktopAPI.stageFile({
         taskPath: taskId,
         filePath,
       });
@@ -130,7 +130,7 @@ const FileChangesPanelComponent: React.FC<FileChangesPanelProps> = ({
     setRevertingFiles((prev) => new Set(prev).add(filePath));
 
     try {
-      const result = await window.electronAPI.revertFile({
+      const result = await window.desktopAPI.revertFile({
         taskPath: taskId,
         filePath,
       });
@@ -187,7 +187,7 @@ const FileChangesPanelComponent: React.FC<FileChangesPanelProps> = ({
 
     setIsCommitting(true);
     try {
-      const result = await window.electronAPI.gitCommitAndPush({
+      const result = await window.desktopAPI.gitCommitAndPush({
         taskPath: taskId,
         commitMessage: commitMessage.trim(),
         createBranchIfOnDefault: true,
@@ -207,7 +207,7 @@ const FileChangesPanelComponent: React.FC<FileChangesPanelProps> = ({
         // Proactively load branch status so the Create PR button appears immediately
         try {
           setBranchStatusLoading(true);
-          const bs = await window.electronAPI.getBranchStatus({ taskPath: taskId });
+          const bs = await window.desktopAPI.getBranchStatus({ taskPath: taskId });
           setBranchAhead(bs?.success ? (bs?.ahead ?? 0) : 0);
         } catch {
           setBranchAhead(0);
@@ -346,7 +346,7 @@ const FileChangesPanelComponent: React.FC<FileChangesPanelProps> = ({
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
-                    if (pr.url) window.electronAPI?.openExternal?.(pr.url);
+                    if (pr.url) window.desktopAPI?.openExternal?.(pr.url);
                   }}
                   className="inline-flex items-center gap-1 rounded border border-border bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
                   title={`${pr.title || 'Pull Request'} (#${pr.number})`}

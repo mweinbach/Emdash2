@@ -16,7 +16,7 @@ const ProjectPrepSettingsCard: React.FC = () => {
 
   const load = useCallback(async () => {
     try {
-      const res = await window.electronAPI.getSettings();
+      const res = await window.desktopAPI.getSettings();
       if (res?.success && res.settings?.projectPrep) {
         const prep = res.settings.projectPrep as any;
         setSettings({
@@ -42,7 +42,7 @@ const ProjectPrepSettingsCard: React.FC = () => {
       setSaving(true);
       try {
         const next = { ...settings, ...partial };
-        const res = await window.electronAPI.updateSettings({ projectPrep: next as any });
+        const res = await window.desktopAPI.updateSettings({ projectPrep: next as any });
         if (res?.success && res.settings?.projectPrep) {
           const prep = res.settings.projectPrep as any;
           setSettings({
