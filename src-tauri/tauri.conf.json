@@ -44,6 +44,6 @@
       "../src/assets/images/emdash/emdash_logo.png",
       "../src/assets/images/emdash/emdash.icns"
     ],
-    "resources": ["../drizzle/**"]
+    "resources": []
   }
 }
