@@ -1,4 +1,5 @@
 import { FitAddon, Terminal, type ITerminalOptions } from 'ghostty-web';
+import { getGhostty } from './ghostty';
 import { ensureTerminalHost } from './terminalHost';
 import { TerminalMetrics } from './TerminalMetrics';
 import { log } from '../lib/logger';
@@ -71,6 +72,7 @@ export class TerminalSessionManager {
     } as CSSStyleDeclaration);
     ensureTerminalHost().appendChild(this.container);
 
+    const ghostty = getGhostty();
     this.terminal = new Terminal({
       cols: options.initialSize.cols,
       rows: options.initialSize.rows,
@@ -78,6 +80,7 @@ export class TerminalSessionManager {
       convertEol: true,
       fontFamily: DEFAULT_TERMINAL_FONT_FAMILY,
       fontSize: 13,
+      ...(ghostty ? { ghostty } : {}),
     });
 
     this.fitAddon = new FitAddon();

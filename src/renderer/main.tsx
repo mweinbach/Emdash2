@@ -3,12 +3,12 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import './index.css';
 import { installPlatformBridge } from './lib/platformBridge';
-import { init as initGhostty } from 'ghostty-web';
+import { loadGhostty } from './terminal/ghostty';
 
 async function bootstrap() {
   installPlatformBridge();
   try {
-    await initGhostty();
+    await loadGhostty();
   } catch (error) {
     console.error('[ghostty] failed to initialize', error);
   }

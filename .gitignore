@@ -3,6 +3,8 @@ node_modules/
 dist/
 release/
 src-tauri/target/
+.zig-cache/
+tools/ghostty-vt-wasm/.ghostty/
 
 # Logs
 *.log
