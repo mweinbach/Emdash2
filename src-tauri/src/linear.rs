@@ -155,7 +155,7 @@ fn normalize_issues(raw: Vec<Value>) -> Vec<Value> {
 }
 
 #[tauri::command]
-pub async fn linear_save_token(app: tauri::AppHandle, token: String) -> Value {
+pub async fn linear_save_token(_app: tauri::AppHandle, token: String) -> Value {
   run_blocking(
     json!({ "success": false, "error": "Task cancelled" }),
     move || {
@@ -191,7 +191,7 @@ pub async fn linear_save_token(app: tauri::AppHandle, token: String) -> Value {
 }
 
 #[tauri::command]
-pub async fn linear_clear_token(app: tauri::AppHandle) -> Value {
+pub async fn linear_clear_token(_app: tauri::AppHandle) -> Value {
   run_blocking(
     json!({ "success": false, "error": "Task cancelled" }),
     move || match clear_token() {
