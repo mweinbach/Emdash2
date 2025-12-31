@@ -36,17 +36,19 @@ const RunLauncher: React.FC<RunLauncherProps> = ({ repo, onCreateRun, onCancel }
   };
 
   return (
-    <div className="w-full max-w-2xl rounded-lg border border-gray-700 bg-gray-800 p-6">
+    <div className="w-full max-w-2xl rounded-lg border border-border bg-card/90 p-6 shadow-lift">
       <div className="mb-6 flex items-center justify-between">
-        <h3 className="text-xl font-semibold text-white">Start New Run</h3>
-        <button className="text-xl text-gray-400 hover:text-white" onClick={onCancel}>
+        <h3 className="text-xl font-semibold text-foreground">Start New Run</h3>
+        <button className="text-xl text-muted-foreground hover:text-foreground" onClick={onCancel}>
           ×
         </button>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="mb-2 block text-sm font-medium text-gray-300">AI Provider</label>
+          <label className="mb-2 block text-sm font-medium text-muted-foreground">
+            AI Provider
+          </label>
           <div className="flex gap-4">
             <label className="flex items-center">
               <input
@@ -56,7 +58,7 @@ const RunLauncher: React.FC<RunLauncherProps> = ({ repo, onCreateRun, onCancel }
                 onChange={(e) => setProvider(e.target.value as 'claude-code')}
                 className="mr-2"
               />
-              <span className="text-white">Claude Code</span>
+              <span className="text-foreground">Claude Code</span>
             </label>
             <label className="flex items-center">
               <input
@@ -66,28 +68,30 @@ const RunLauncher: React.FC<RunLauncherProps> = ({ repo, onCreateRun, onCancel }
                 onChange={(e) => setProvider(e.target.value as 'openai-agents')}
                 className="mr-2"
               />
-              <span className="text-white">OpenAI Agents</span>
+              <span className="text-foreground">OpenAI Agents</span>
             </label>
           </div>
         </div>
 
         <div>
-          <label className="mb-2 block text-sm font-medium text-gray-300">Prompt</label>
+          <label className="mb-2 block text-sm font-medium text-muted-foreground">Prompt</label>
           <textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             placeholder="Describe what you want the coding agents to do..."
-            className="h-32 w-full rounded border border-gray-600 bg-gray-700 p-3 text-white placeholder-gray-400 focus:border-blue-500 focus:outline-none"
+            className="h-32 w-full rounded border border-input bg-surface-2 p-3 text-foreground placeholder:text-muted-foreground focus:border-ring/60 focus:outline-none"
             required
           />
         </div>
 
         <div>
-          <label className="mb-2 block text-sm font-medium text-gray-300">Number of Agents</label>
+          <label className="mb-2 block text-sm font-medium text-muted-foreground">
+            Number of Agents
+          </label>
           <select
             value={numAgents}
             onChange={(e) => setNumAgents(parseInt(e.target.value))}
-            className="w-full rounded border border-gray-600 bg-gray-700 p-3 text-white focus:border-blue-500 focus:outline-none"
+            className="w-full rounded border border-input bg-surface-2 p-3 text-foreground focus:border-ring/60 focus:outline-none"
           >
             <option value={1}>1 Agent</option>
             <option value={2}>2 Agents</option>
@@ -98,21 +102,23 @@ const RunLauncher: React.FC<RunLauncherProps> = ({ repo, onCreateRun, onCancel }
         </div>
 
         <div>
-          <label className="mb-2 block text-sm font-medium text-gray-300">Base Branch</label>
+          <label className="mb-2 block text-sm font-medium text-muted-foreground">
+            Base Branch
+          </label>
           <input
             type="text"
             value={baseBranch}
             onChange={(e) => setBaseBranch(e.target.value)}
-            className="w-full rounded border border-gray-600 bg-gray-700 p-3 text-white focus:border-blue-500 focus:outline-none"
+            className="w-full rounded border border-input bg-surface-2 p-3 text-foreground focus:border-ring/60 focus:outline-none"
             placeholder="main"
           />
         </div>
 
-        <div className="rounded bg-gray-700 p-3">
-          <div className="text-sm text-gray-300">
+        <div className="rounded bg-surface-3 p-3">
+          <div className="text-sm text-muted-foreground">
             <strong>Repository:</strong> {repo.path.split('/').pop()}
           </div>
-          <div className="text-sm text-gray-400">
+          <div className="text-sm text-muted-foreground">
             <strong>Origin:</strong> {repo.origin}
           </div>
         </div>
@@ -120,14 +126,14 @@ const RunLauncher: React.FC<RunLauncherProps> = ({ repo, onCreateRun, onCancel }
         <div className="flex gap-3 pt-4">
           <button
             type="submit"
-            className="flex-1 rounded bg-blue-600 px-4 py-3 font-medium text-white transition-colors hover:bg-blue-700"
+            className="flex-1 rounded bg-primary px-4 py-3 font-medium text-primary-foreground transition-colors hover:bg-primary/90"
           >
             Start Run
           </button>
           <button
             type="button"
             onClick={onCancel}
-            className="rounded bg-gray-600 px-4 py-3 text-white transition-colors hover:bg-gray-500"
+            className="rounded bg-surface-4 px-4 py-3 text-foreground transition-colors hover:bg-surface-3"
           >
             Cancel
           </button>

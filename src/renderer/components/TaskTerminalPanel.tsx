@@ -157,11 +157,11 @@ const TaskTerminalPanelComponent: React.FC<Props> = ({
   if (!task && !projectPath) {
     return (
       <div
-        className={`flex h-full flex-col items-center justify-center bg-gray-50 dark:bg-gray-900 ${className}`}
+        className={`flex h-full flex-col items-center justify-center bg-surface-2 ${className}`}
       >
-        <Bot className="mb-2 h-8 w-8 text-gray-400" />
-        <h3 className="mb-1 text-sm text-gray-600 dark:text-gray-400">No Task Selected</h3>
-        <p className="text-center text-xs text-gray-500 dark:text-gray-500">
+        <Bot className="mb-2 h-8 w-8 text-muted-foreground/70" />
+        <h3 className="mb-1 text-sm text-foreground/80">No Task Selected</h3>
+        <p className="text-center text-xs text-muted-foreground">
           Select a task to view its terminal
         </p>
       </div>
@@ -169,8 +169,8 @@ const TaskTerminalPanelComponent: React.FC<Props> = ({
   }
 
   return (
-    <div className={cn('flex h-full flex-col bg-white dark:bg-gray-800', className)}>
-      <div className="flex items-center gap-2 border-b border-border bg-gray-50 px-2 py-1.5 dark:bg-gray-900">
+    <div className={cn('flex h-full flex-col bg-card/80', className)}>
+      <div className="flex items-center gap-2 border-b border-border bg-surface-2 px-2 py-1.5">
         <div className="flex items-center gap-1">
           <TooltipProvider delayDuration={200}>
             <Tooltip>
@@ -242,8 +242,8 @@ const TaskTerminalPanelComponent: React.FC<Props> = ({
                 className={cn(
                   'group flex items-center space-x-1 rounded px-2 py-1 text-xs font-medium transition-colors',
                   isActive
-                    ? 'bg-background text-foreground shadow-sm dark:bg-gray-800 dark:text-gray-50'
-                    : 'text-muted-foreground hover:bg-background/70 dark:hover:bg-gray-800'
+                    ? 'bg-surface text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:bg-surface/60'
                 )}
                 title={terminal.title}
               >
@@ -281,7 +281,7 @@ const TaskTerminalPanelComponent: React.FC<Props> = ({
               cwd: mode === 'global' ? projectPath : task?.path,
             });
           }}
-          className="ml-2 flex h-6 w-6 items-center justify-center rounded border border-transparent text-muted-foreground transition hover:border-border hover:bg-background dark:hover:bg-gray-800"
+          className="ml-2 flex h-6 w-6 items-center justify-center rounded border border-transparent text-muted-foreground transition hover:border-border hover:bg-surface/60"
           title={mode === 'global' ? 'New global terminal' : 'New task terminal'}
           disabled={mode === 'task' && !task}
         >
@@ -295,8 +295,8 @@ const TaskTerminalPanelComponent: React.FC<Props> = ({
           effectiveTheme === 'dark'
             ? provider === 'mistral'
               ? 'bg-[#202938]'
-              : 'bg-gray-800'
-            : 'bg-white'
+              : 'bg-surface-3'
+            : 'bg-card'
         )}
       >
         {terminals.map((terminal) => {

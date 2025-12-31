@@ -171,12 +171,6 @@ export function useKeyboardShortcuts(handlers: GlobalShortcutHandlers) {
         requiresClosed: true,
       },
       {
-        config: APP_SHORTCUTS.TOGGLE_THEME,
-        handler: () => handlers.onToggleTheme?.(),
-        priority: 'global',
-        requiresClosed: true,
-      },
-      {
         config: APP_SHORTCUTS.TOGGLE_KANBAN,
         handler: () => handlers.onToggleKanban?.(),
         priority: 'global',
@@ -188,6 +182,15 @@ export function useKeyboardShortcuts(handlers: GlobalShortcutHandlers) {
         priority: 'modal',
       },
     ];
+
+    if (handlers.onToggleTheme) {
+      shortcuts.push({
+        config: APP_SHORTCUTS.TOGGLE_THEME,
+        handler: () => handlers.onToggleTheme?.(),
+        priority: 'global',
+        requiresClosed: true,
+      });
+    }
 
     const handleKeyDown = (event: KeyboardEvent) => {
       const key = event.key.toLowerCase();

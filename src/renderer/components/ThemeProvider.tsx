@@ -1,30 +1,17 @@
 import { createContext, useEffect, useState, type ReactNode } from 'react';
 
 type Theme = 'light' | 'dark' | 'system';
-
-const STORAGE_KEY = 'emdash-theme';
+const LOCKED_THEME: Theme = 'system';
 
 function getSystemTheme(): 'light' | 'dark' {
   if (typeof window === 'undefined') return 'light';
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }
 
-function getStoredTheme(): Theme {
-  if (typeof window === 'undefined') return 'system';
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored === 'light' || stored === 'dark' || stored === 'system') {
-      return stored;
-    }
-  } catch {}
-  return 'system';
-}
-
-function applyTheme(theme: Theme) {
+function applyTheme(effectiveTheme: 'light' | 'dark') {
   if (typeof document === 'undefined') return;
 
   const root = document.documentElement;
-  const effectiveTheme = theme === 'system' ? getSystemTheme() : theme;
 
   if (effectiveTheme === 'dark') {
     root.classList.add('dark');
@@ -43,23 +30,16 @@ interface ThemeContextType {
 export const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>(getStoredTheme);
+  const [theme] = useState<Theme>(LOCKED_THEME);
   const [systemTheme, setSystemTheme] = useState<'light' | 'dark'>(getSystemTheme);
 
-  const effectiveTheme = theme === 'system' ? systemTheme : theme;
+  const effectiveTheme = systemTheme;
 
   useEffect(() => {
-    applyTheme(theme);
-    try {
-      localStorage.setItem(STORAGE_KEY, theme);
-    } catch {
-      // Ignore localStorage errors
-    }
-  }, [theme]);
+    applyTheme(effectiveTheme);
+  }, [effectiveTheme]);
 
   useEffect(() => {
-    if (theme !== 'system') return undefined;
-
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     const handler = () => {
       setSystemTheme(getSystemTheme());
@@ -76,12 +56,16 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     return () => mediaQuery.removeListener(handler);
   }, [theme]);
 
+  const setTheme = () => {
+    // Theme selection is intentionally locked to system.
+  };
+
   const toggleTheme = () => {
-    setThemeState((current) => (current === 'dark' ? 'light' : 'dark'));
+    // Theme selection is intentionally locked to system.
   };
 
   return (
-    <ThemeContext.Provider value={{ theme, setTheme: setThemeState, toggleTheme, effectiveTheme }}>
+    <ThemeContext.Provider value={{ theme, setTheme, toggleTheme, effectiveTheme }}>
       {children}
     </ThemeContext.Provider>
   );

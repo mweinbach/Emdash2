@@ -453,7 +453,7 @@ const BrowserPane: React.FC<{
           zIndex: 10,
         }}
       >
-        <div className="flex flex-shrink-0 items-center gap-1 border-b border-border bg-gray-50 px-2 dark:bg-gray-900">
+        <div className="flex flex-shrink-0 items-center gap-1 border-b border-border bg-surface-2 px-2">
           <button
             className="inline-flex h-6 w-6 items-center justify-center rounded hover:bg-muted"
             onClick={() => goBack()}
@@ -544,7 +544,7 @@ const BrowserPane: React.FC<{
             id="emdash-browser-drag"
             className="absolute left-0 top-0 z-[200] h-full w-[6px] cursor-col-resize hover:bg-border/60"
           />
-          <div ref={containerRef} className="h-full w-full bg-white dark:bg-gray-950" />
+          <div ref={containerRef} className="h-full w-full bg-card" />
           {dragging ? (
             <div
               className="absolute inset-0 z-[180] cursor-col-resize"

@@ -241,11 +241,11 @@ export const LinearIssueSelector: React.FC<LinearIssueSelectorProps> = ({
         open={dropdownOpen}
         onOpenChange={(open) => setDropdownOpen(open)}
       >
-        <SelectTrigger className="h-9 w-full border-none bg-gray-100 dark:bg-gray-700">
+      <SelectTrigger className="h-9 w-full border-none bg-surface-2">
           <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden text-left text-foreground">
             {selectedIssue ? (
               <>
-                <span className="inline-flex shrink-0 items-center gap-1.5 rounded border border-gray-200 bg-gray-100 px-1.5 py-0.5 dark:border-gray-700 dark:bg-gray-800">
+                <span className="inline-flex shrink-0 items-center gap-1.5 rounded border border-border/70 bg-surface-3 px-1.5 py-0.5">
                   <img src={linearLogo} alt="Linear" className="h-3.5 w-3.5 dark:invert" />
                   <span className="text-[11px] font-medium text-foreground">
                     {selectedIssue.identifier}
@@ -290,7 +290,7 @@ export const LinearIssueSelector: React.FC<LinearIssueSelectorProps> = ({
               showIssues.map((issue) => (
                 <SelectItem key={issue.id || issue.identifier} value={issue.identifier}>
                   <span className="flex min-w-0 items-center gap-2">
-                    <span className="inline-flex shrink-0 items-center gap-1.5 rounded border border-gray-200 bg-gray-100 px-1.5 py-0.5 dark:border-gray-700 dark:bg-gray-800">
+                    <span className="inline-flex shrink-0 items-center gap-1.5 rounded border border-border/70 bg-surface-3 px-1.5 py-0.5">
                       <img src={linearLogo} alt="Linear" className="h-3.5 w-3.5 dark:invert" />
                       <span className="text-[11px] font-medium text-foreground">
                         {issue.identifier}

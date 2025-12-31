@@ -20,6 +20,12 @@ export default {
     },
     extend: {
       colors: {
+        surface: {
+          DEFAULT: 'hsl(var(--surface))',
+          2: 'hsl(var(--surface-2))',
+          3: 'hsl(var(--surface-3))',
+          4: 'hsl(var(--surface-4))',
+        },
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',
         ring: 'hsl(var(--ring))',
@@ -61,10 +67,19 @@ export default {
           5: 'hsl(var(--chart-5))',
         },
       },
+      fontFamily: {
+        sans: ['var(--font-sans)'],
+        serif: ['var(--font-serif)'],
+        mono: ['var(--font-mono)'],
+      },
       borderRadius: {
         lg: 'var(--radius)',
         md: 'calc(var(--radius) - 2px)',
         sm: 'calc(var(--radius) - 4px)',
+      },
+      boxShadow: {
+        soft: '0 18px 50px hsl(var(--shadow) / 0.18)',
+        lift: '0 10px 30px hsl(var(--shadow) / 0.14)',
       },
       keyframes: {
         'accordion-down': {

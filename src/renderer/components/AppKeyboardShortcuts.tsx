@@ -1,7 +1,6 @@
 import React from 'react';
 import { useSidebar } from '../components/ui/sidebar';
 import { useRightSidebar } from '../components/ui/right-sidebar';
-import { useTheme } from '../hooks/useTheme';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 
 export interface AppKeyboardShortcutsProps {
@@ -25,14 +24,12 @@ const AppKeyboardShortcuts: React.FC<AppKeyboardShortcutsProps> = ({
 }) => {
   const { toggle: toggleLeftSidebar } = useSidebar();
   const { toggle: toggleRightSidebar } = useRightSidebar();
-  const { toggleTheme } = useTheme();
 
   useKeyboardShortcuts({
     onToggleCommandPalette: handleToggleCommandPalette,
     onOpenSettings: handleOpenSettings,
     onToggleLeftSidebar: toggleLeftSidebar,
     onToggleRightSidebar: toggleRightSidebar,
-    onToggleTheme: toggleTheme,
     onToggleKanban: handleToggleKanban,
     onCloseModal: showCommandPalette
       ? handleCloseCommandPalette

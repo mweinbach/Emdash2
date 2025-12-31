@@ -414,6 +414,13 @@ const AppContent: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    if (!platform) return;
+    try {
+      document.documentElement.dataset.platform = platform;
+    } catch {}
+  }, [platform]);
+
+  useEffect(() => {
     let cancelled = false;
     const waitForRuntimeReady = (timeoutMs = 1500) =>
       new Promise<void>((resolve) => {
@@ -1741,7 +1748,7 @@ const AppContent: React.FC = () => {
     }
     if (showHomeView) {
       return (
-        <div className="flex h-full flex-col overflow-y-auto bg-background text-foreground">
+        <div className="flex h-full flex-col overflow-y-auto bg-background/60 text-foreground">
           <div className="container mx-auto flex min-h-full max-w-3xl flex-1 flex-col justify-center px-8 py-8">
             <div className="mb-6 text-center">
               <div className="mb-2 flex items-center justify-center">
@@ -1784,7 +1791,7 @@ const AppContent: React.FC = () => {
                   })();
                   handleOpenProject();
                 }}
-                className="group flex flex-col items-start justify-between rounded-lg border border-border bg-muted/20 p-4 text-card-foreground shadow-sm transition-all hover:bg-muted/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                className="group flex flex-col items-start justify-between rounded-lg border border-border bg-surface-2/70 p-4 text-card-foreground shadow-lift transition-all hover:bg-surface-3 hover:shadow-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               >
                 <FolderOpen className="mb-5 h-5 w-5 text-foreground opacity-70" />
                 <div className="w-full min-w-0 text-left">
@@ -1796,7 +1803,7 @@ const AppContent: React.FC = () => {
                 whileTap={{ scale: 0.97 }}
                 transition={{ duration: 0.1, ease: 'easeInOut' }}
                 onClick={handleNewProjectClick}
-                className="group flex flex-col items-start justify-between rounded-lg border border-border bg-muted/20 p-4 text-card-foreground shadow-sm transition-all hover:bg-muted/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                className="group flex flex-col items-start justify-between rounded-lg border border-border bg-surface-2/70 p-4 text-card-foreground shadow-lift transition-all hover:bg-surface-3 hover:shadow-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               >
                 <Plus className="mb-5 h-5 w-5 text-foreground opacity-70" />
                 <div className="w-full min-w-0 text-left">
@@ -1808,7 +1815,7 @@ const AppContent: React.FC = () => {
                 whileTap={{ scale: 0.97 }}
                 transition={{ duration: 0.1, ease: 'easeInOut' }}
                 onClick={handleCloneProjectClick}
-                className="group flex flex-col items-start justify-between rounded-lg border border-border bg-muted/20 p-4 text-card-foreground shadow-sm transition-all hover:bg-muted/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                className="group flex flex-col items-start justify-between rounded-lg border border-border bg-surface-2/70 p-4 text-card-foreground shadow-lift transition-all hover:bg-surface-3 hover:shadow-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               >
                 <Github className="mb-5 h-5 w-5 text-foreground opacity-70" />
                 <div className="w-full min-w-0 text-left">
@@ -1860,7 +1867,7 @@ const AppContent: React.FC = () => {
   return (
     <BrowserProvider>
       <div
-        className="flex h-[100dvh] w-full flex-col bg-background text-foreground"
+        className="app-surface flex h-[100dvh] w-full flex-col text-foreground"
         style={{ '--tb': TITLEBAR_HEIGHT } as React.CSSProperties}
       >
         {(() => {
@@ -1955,7 +1962,7 @@ const AppContent: React.FC = () => {
                   minSize={MAIN_PANEL_MIN_SIZE}
                   order={2}
                 >
-                  <div className="flex h-full flex-col overflow-hidden bg-background text-foreground">
+                  <div className="flex h-full flex-col overflow-hidden bg-background/80 text-foreground">
                     {renderMainContent()}
                   </div>
                 </ResizablePanel>

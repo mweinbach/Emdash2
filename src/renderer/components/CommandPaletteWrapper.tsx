@@ -2,7 +2,6 @@ import React from 'react';
 import CommandPalette from '../components/CommandPalette';
 import { useSidebar } from '../components/ui/sidebar';
 import { useRightSidebar } from '../components/ui/right-sidebar';
-import { useTheme } from '../hooks/useTheme';
 import type { Project, Task } from '../types/app';
 
 export interface CommandPaletteWrapperProps {
@@ -28,7 +27,6 @@ const CommandPaletteWrapper: React.FC<CommandPaletteWrapperProps> = ({
 }) => {
   const { toggle: toggleLeftSidebar } = useSidebar();
   const { toggle: toggleRightSidebar } = useRightSidebar();
-  const { toggleTheme } = useTheme();
 
   return (
     <CommandPalette
@@ -50,7 +48,6 @@ const CommandPaletteWrapper: React.FC<CommandPaletteWrapperProps> = ({
       onOpenSettings={handleOpenSettings}
       onToggleLeftSidebar={toggleLeftSidebar}
       onToggleRightSidebar={toggleRightSidebar}
-      onToggleTheme={toggleTheme}
       onGoHome={handleGoHome}
       onOpenProject={handleOpenProject}
     />

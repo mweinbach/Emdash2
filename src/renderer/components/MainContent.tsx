@@ -28,29 +28,29 @@ const MainContent: React.FC<MainContentProps> = ({
 
   if (!selectedRepo) {
     return (
-      <div className="flex flex-1 items-center justify-center bg-gray-900">
+      <div className="flex flex-1 items-center justify-center bg-background">
         <div className="text-center">
           <div className="mb-8">
             <h1
-              className="mb-4 text-6xl font-bold text-white"
+              className="mb-4 text-6xl font-bold text-foreground"
               style={{
                 fontFamily: 'monospace',
                 letterSpacing: '0.1em',
-                textShadow: '2px 2px 0px #000',
+                textShadow: '2px 2px 0px rgba(0, 0, 0, 0.2)',
               }}
             >
               Emdash
             </h1>
-            <h2 className="text-2xl text-gray-400">Codex</h2>
+            <h2 className="text-2xl text-muted-foreground">Codex</h2>
           </div>
 
           <div className="flex justify-center gap-6">
-            <div className="rounded-lg border border-gray-700 bg-gray-800 p-6 transition-colors hover:bg-gray-700">
+            <div className="rounded-lg border border-border bg-surface-3 p-6 transition-colors hover:bg-surface-4">
               <div className="mb-3 flex justify-center">
                 <FolderOpen className="h-12 w-12 text-blue-400" />
               </div>
-              <h3 className="mb-2 text-lg font-semibold text-white">Open Project</h3>
-              <p className="text-sm text-gray-400">Select a repository to get started</p>
+              <h3 className="mb-2 text-lg font-semibold text-foreground">Open Project</h3>
+              <p className="text-sm text-muted-foreground">Select a repository to get started</p>
             </div>
           </div>
         </div>
@@ -59,23 +59,23 @@ const MainContent: React.FC<MainContentProps> = ({
   }
 
   return (
-    <div className="flex flex-1 flex-col bg-gray-900">
-      <div className="border-b border-gray-700 bg-gray-800 p-4">
+    <div className="flex flex-1 flex-col bg-background">
+      <div className="border-b border-border bg-surface-3 p-4">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-xl font-semibold text-white">
+            <h2 className="text-xl font-semibold text-foreground">
               {selectedRepo.path.split('/').pop()}
             </h2>
-            <p className="text-sm text-gray-400">{selectedRepo.origin}</p>
+            <p className="text-sm text-muted-foreground">{selectedRepo.origin}</p>
           </div>
           <div className="flex gap-2">
             <button
-              className="rounded bg-blue-600 px-4 py-2 text-white transition-colors hover:bg-blue-700"
+              className="rounded bg-primary px-4 py-2 text-primary-foreground transition-colors hover:bg-primary/90"
               onClick={() => setShowRunLauncher(true)}
             >
               Start Run
             </button>
-            <button className="rounded bg-gray-700 px-4 py-2 text-white transition-colors hover:bg-gray-600">
+            <button className="rounded bg-surface-4 px-4 py-2 text-foreground transition-colors hover:bg-surface-3">
               Settings
             </button>
           </div>
@@ -87,10 +87,10 @@ const MainContent: React.FC<MainContentProps> = ({
           <div className="flex h-full items-center justify-center">
             <div className="text-center">
               <div className="mb-4 text-6xl">🤖</div>
-              <h3 className="mb-2 text-xl font-semibold text-white">No runs yet</h3>
-              <p className="mb-4 text-gray-400">Start your first coding agent run</p>
+              <h3 className="mb-2 text-xl font-semibold text-foreground">No runs yet</h3>
+              <p className="mb-4 text-muted-foreground">Start your first coding agent run</p>
               <button
-                className="rounded-lg bg-blue-600 px-6 py-3 text-white transition-colors hover:bg-blue-700"
+                className="rounded-lg bg-primary px-6 py-3 text-primary-foreground transition-colors hover:bg-primary/90"
                 onClick={() => setShowRunLauncher(true)}
               >
                 Create Run

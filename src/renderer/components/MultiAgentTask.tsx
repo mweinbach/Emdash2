@@ -435,8 +435,8 @@ const MultiAgentTask: React.FC<Props> = ({ task }) => {
                         ? 'bg-[#202938]'
                         : 'bg-white'
                       : isDark
-                        ? 'bg-gray-800'
-                        : 'bg-white'
+                        ? 'bg-surface-3'
+                        : 'bg-card'
                   }`}
                 >
                   <TerminalPane
@@ -491,10 +491,10 @@ const MultiAgentTask: React.FC<Props> = ({ task }) => {
 
       <div className="px-6 pb-6 pt-4">
         <div className="mx-auto max-w-4xl">
-          <div className="relative rounded-md border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800">
+          <div className="relative rounded-md border border-border bg-card/90 shadow-lift">
             <div className="flex items-center gap-2 rounded-md px-4 py-3">
               <Input
-                className="h-9 flex-1 border-gray-200 bg-gray-100 dark:border-gray-700 dark:bg-gray-700"
+                className="h-9 flex-1 bg-surface-2"
                 placeholder="Tell the agents what to do..."
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
@@ -510,7 +510,7 @@ const MultiAgentTask: React.FC<Props> = ({ task }) => {
               <Button
                 variant="outline"
                 size="sm"
-                className="h-9 border border-gray-200 bg-gray-100 px-3 text-xs font-medium hover:bg-gray-200 dark:border-gray-700 dark:bg-gray-700 dark:hover:bg-gray-600"
+                className="h-9 border border-border/70 bg-surface-2 px-3 text-xs font-medium hover:bg-surface-3"
                 onClick={handleRunAll}
                 disabled={!prompt.trim()}
                 title="Run in all panes (Enter)"

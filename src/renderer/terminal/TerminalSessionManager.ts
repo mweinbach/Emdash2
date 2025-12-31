@@ -7,6 +7,8 @@ import { PROVIDERS, PROVIDER_IDS, type ProviderId } from '@shared/providers/regi
 
 const SNAPSHOT_INTERVAL_MS = 2 * 60 * 1000; // 2 minutes
 const MAX_DATA_WINDOW_BYTES = 128 * 1024 * 1024; // 128 MB soft guardrail
+const DEFAULT_TERMINAL_FONT_FAMILY =
+  '"SF Mono", "JetBrains Mono", "Berkeley Mono", Menlo, Monaco, "Cascadia Mono", Consolas, "Liberation Mono", "Courier New", monospace';
 
 // Store viewport positions per terminal ID to preserve scroll position across detach/attach cycles
 const viewportPositions = new Map<string, number>();
@@ -74,7 +76,7 @@ export class TerminalSessionManager {
       rows: options.initialSize.rows,
       scrollback: options.scrollbackLines,
       convertEol: true,
-      fontFamily: 'Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+      fontFamily: DEFAULT_TERMINAL_FONT_FAMILY,
       fontSize: 13,
     });
 
@@ -275,7 +277,7 @@ export class TerminalSessionManager {
           };
 
     // Extract font settings before applying theme (they're not part of ITheme)
-    const fontFamily = (theme.override as any)?.fontFamily;
+    const fontFamily = (theme.override as any)?.fontFamily ?? DEFAULT_TERMINAL_FONT_FAMILY;
     const fontSize = (theme.override as any)?.fontSize;
 
     // Apply color theme (excluding font properties)
@@ -285,9 +287,7 @@ export class TerminalSessionManager {
     this.terminal.options.theme = { ...base, ...colorTheme };
 
     // Apply font settings separately
-    if (fontFamily) {
-      this.terminal.options.fontFamily = fontFamily;
-    }
+    this.terminal.options.fontFamily = fontFamily;
     if (fontSize) {
       this.terminal.options.fontSize = fontSize;
     }

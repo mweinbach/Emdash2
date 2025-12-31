@@ -80,7 +80,7 @@ export const TaskDeleteButton: React.FC<Props> = ({
                 type="button"
                 className={cn(
                   className ||
-                    'inline-flex items-center justify-center rounded p-1 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800',
+                    'inline-flex items-center justify-center rounded p-1 text-muted-foreground hover:bg-accent/30',
                   isDeleting && 'opacity-100'
                 )}
                 title="Delete Task"

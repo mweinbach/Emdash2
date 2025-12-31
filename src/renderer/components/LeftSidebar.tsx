@@ -85,7 +85,7 @@ const MenuItemButton: React.FC<MenuItemButtonProps> = ({
       role="menuitem"
       tabIndex={0}
       aria-label={ariaLabel}
-      className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
+      className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent/40 hover:text-foreground"
       onClick={onClick}
       onKeyDown={handleKeyDown}
     >
@@ -181,7 +181,7 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
                 <SidebarMenuItem>
                   <SidebarMenuButton
                     asChild
-                    className={`min-w-0 ${isHomeView ? 'bg-black/5 dark:bg-white/5' : ''}`}
+                    className={`min-w-0 ${isHomeView ? 'bg-accent/30' : ''}`}
                   >
                     <Button
                       variant="ghost"
@@ -189,7 +189,7 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
                       aria-label="Home"
                       className="w-full justify-start"
                     >
-                      <Home className="h-5 w-5 text-gray-600 dark:text-gray-400 sm:h-4 sm:w-4" />
+                      <Home className="h-5 w-5 text-muted-foreground sm:h-4 sm:w-4" />
                       <span className="hidden text-sm font-medium sm:inline">Home</span>
                     </Button>
                   </SidebarMenuButton>
@@ -255,7 +255,7 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
                         <Collapsible defaultOpen className="group/collapsible">
                           <div
                             className={`group/project group/task flex w-full min-w-0 items-center rounded-md px-2 py-2 text-sm font-medium focus-within:bg-accent focus-within:text-accent-foreground hover:bg-accent hover:text-accent-foreground ${
-                              isProjectActive ? 'bg-black/5 dark:bg-white/5' : ''
+                              isProjectActive ? 'bg-accent/30' : ''
                             }`}
                           >
                             <motion.button
@@ -303,12 +303,12 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
 
                           <CollapsibleContent asChild>
                             <div className="ml-7 mt-2 min-w-0">
-                              <div className="bg-sidebar pb-1">
+                              <div className="pb-1">
                                 <motion.button
                                   type="button"
                                   whileTap={{ scale: 0.97 }}
                                   transition={{ duration: 0.1, ease: 'easeInOut' }}
-                                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-black/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-white/5"
+                                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent/30 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     if (
@@ -324,10 +324,7 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
                                   disabled={isCreatingTask}
                                   aria-label={`Add Task to ${typedProject.name}`}
                                 >
-                                  <Plus
-                                    className="h-3 w-3 flex-shrink-0 text-gray-400"
-                                    aria-hidden
-                                  />
+                                  <Plus className="h-3 w-3 flex-shrink-0 text-muted-foreground" aria-hidden />
                                   <span className="truncate">Add Task</span>
                                 </motion.button>
                               </div>
@@ -347,8 +344,8 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
                                         }
                                         onSelectTask && onSelectTask(task);
                                       }}
-                                      className={`group/task min-w-0 rounded-md px-2 py-1.5 hover:bg-black/5 dark:hover:bg-white/5 ${
-                                        isActive ? 'bg-black/5 dark:bg-white/5' : ''
+                                      className={`group/task min-w-0 rounded-md px-2 py-1.5 transition-colors hover:bg-accent/25 ${
+                                        isActive ? 'bg-accent/25' : ''
                                       }`}
                                       title={task.name}
                                     >
@@ -417,7 +414,7 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
             </SidebarGroup>
           )}
         </SidebarContent>
-        <SidebarFooter className="min-w-0 overflow-hidden border-t border-gray-200 px-2 py-2 dark:border-gray-800 sm:px-4 sm:py-4">
+        <SidebarFooter className="min-w-0 overflow-hidden border-t border-border/70 px-2 py-2 sm:px-4 sm:py-4">
           <SidebarMenu className="w-full min-w-0">
             <SidebarMenuItem className="min-w-0">
               <SidebarMenuButton
@@ -431,7 +428,7 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
                 }}
                 className={`flex w-full min-w-0 items-center justify-start gap-2 overflow-hidden px-2 py-2 text-sm text-muted-foreground focus-visible:outline-none focus-visible:ring-0 ${
                   githubProfileUrl
-                    ? 'hover:bg-black/5 dark:hover:bg-white/5'
+                    ? 'hover:bg-accent/30'
                     : 'cursor-default hover:bg-transparent'
                 }`}
                 aria-label={githubProfileUrl ? 'Open GitHub profile' : undefined}

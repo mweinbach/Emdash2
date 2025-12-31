@@ -109,13 +109,13 @@ const Sidebar = React.forwardRef<HTMLDivElement, SidebarProps>(
 
     const baseClasses =
       variant === 'default'
-        ? 'group/sidebar relative z-50 flex h-full flex-col border-r border-border bg-muted/10 text-sm text-foreground transition-all duration-200 ease-linear overflow-hidden flex-shrink-0 data-[state=collapsed]:border-r-0 data-[state=collapsed]:pointer-events-none'
+        ? 'group/sidebar relative z-50 flex h-full flex-col border-r border-border bg-surface/90 text-sm text-foreground transition-all duration-200 ease-linear overflow-hidden flex-shrink-0 data-[state=collapsed]:border-r-0 data-[state=collapsed]:pointer-events-none'
         : '';
     const responsiveClasses =
       variant === 'default'
         ? isMobile
           ? cn(
-              'fixed inset-y-0 left-0 w-[var(--sidebar-width-mobile,18rem)] bg-background shadow-lg',
+              'fixed inset-y-0 left-0 w-[var(--sidebar-width-mobile,18rem)] bg-surface/95 shadow-lift',
               open ? 'translate-x-0' : '-translate-x-full'
             )
           : cn(open ? 'w-full' : 'w-0')
@@ -136,7 +136,7 @@ const Sidebar = React.forwardRef<HTMLDivElement, SidebarProps>(
           <button
             type="button"
             aria-label="Close sidebar overlay"
-            className="fixed inset-0 z-40 bg-black/20 backdrop-blur-sm lg:hidden"
+            className="fixed inset-0 z-40 bg-black/10 backdrop-blur-sm lg:hidden"
             onClick={() => setOpen(false)}
           />
         ) : null}

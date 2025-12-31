@@ -140,14 +140,14 @@ export const ProviderBar: React.FC<Props> = ({
   return (
     <div className="px-6 pb-6 pt-4">
       <div className="mx-auto max-w-4xl">
-        <div className="relative rounded-md border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800">
+        <div className="relative rounded-md border border-border bg-card/90 shadow-lift">
           <div className="flex items-center rounded-md px-4 py-3">
             <div className="flex items-center gap-3">
               <TooltipProvider delayDuration={250}>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <div
-                      className="inline-flex h-7 cursor-default select-none items-center gap-1.5 rounded-md border border-gray-200 bg-gray-100 px-2 text-xs text-foreground dark:border-gray-700 dark:bg-gray-700"
+                      className="inline-flex h-7 cursor-default select-none items-center gap-1.5 rounded-md border border-border/70 bg-surface-2 px-2 text-xs text-foreground"
                       role="button"
                       aria-disabled
                       title={cfg.name}
@@ -161,7 +161,7 @@ export const ProviderBar: React.FC<Props> = ({
                         />
                       ) : (
                         <div
-                          className="flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center rounded-[3px] bg-gray-300 text-[9px] text-gray-700 dark:bg-gray-600 dark:text-gray-200"
+                          className="flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center rounded-[3px] bg-surface-4 text-[9px] text-foreground/70"
                           aria-hidden
                         >
                           {cfg.name.slice(0, 1)}
@@ -182,7 +182,7 @@ export const ProviderBar: React.FC<Props> = ({
                     <TooltipTrigger asChild>
                       <button
                         type="button"
-                        className="inline-flex h-7 items-center gap-1.5 rounded-md border border-gray-200 bg-gray-100 px-2 text-xs text-foreground dark:border-gray-700 dark:bg-gray-700"
+                        className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border/70 bg-surface-2 px-2 text-xs text-foreground"
                         title={`${linearIssue.identifier} — ${linearIssue.title || ''}`}
                         onClick={() => {
                           try {
@@ -197,11 +197,11 @@ export const ProviderBar: React.FC<Props> = ({
                     </TooltipTrigger>
                     <TooltipContent
                       side="bottom"
-                      className="max-w-sm bg-white text-foreground dark:bg-gray-900 dark:text-foreground"
+                      className="max-w-sm bg-popover text-popover-foreground"
                     >
                       <div className="text-xs">
                         <div className="mb-1.5 flex min-w-0 items-center gap-2">
-                          <span className="inline-flex shrink-0 items-center gap-1.5 rounded border border-gray-200 bg-gray-100 px-1.5 py-0.5 dark:border-gray-700 dark:bg-gray-800">
+                          <span className="inline-flex shrink-0 items-center gap-1.5 rounded border border-border/70 bg-surface-3 px-1.5 py-0.5">
                             <img src={linearLogo} alt="Linear" className="h-3.5 w-3.5" />
                             <span className="text-[11px] font-medium text-foreground">
                               {linearIssue.identifier}
@@ -267,7 +267,7 @@ export const ProviderBar: React.FC<Props> = ({
                     <TooltipTrigger asChild>
                       <button
                         type="button"
-                        className="inline-flex h-7 items-center gap-1.5 rounded-md border border-gray-200 bg-gray-100 px-2 text-xs text-foreground dark:border-gray-700 dark:bg-gray-700"
+                        className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border/70 bg-surface-2 px-2 text-xs text-foreground"
                         title={`#${githubIssue.number} — ${githubIssue.title || ''}`}
                         onClick={() => {
                           try {
@@ -283,7 +283,7 @@ export const ProviderBar: React.FC<Props> = ({
                     <TooltipContent side="bottom" className="max-w-sm">
                       <div className="text-xs">
                         <div className="mb-1.5 flex min-w-0 items-center gap-2">
-                          <span className="inline-flex shrink-0 items-center gap-1.5 rounded border border-gray-200 bg-gray-100 px-1.5 py-0.5 dark:border-gray-700 dark:bg-gray-800">
+                          <span className="inline-flex shrink-0 items-center gap-1.5 rounded border border-border/70 bg-surface-3 px-1.5 py-0.5">
                             <img src={githubLogo} alt="GitHub" className="h-3.5 w-3.5" />
                             <span className="text-[11px] font-medium text-foreground">
                               #{githubIssue.number}
@@ -320,7 +320,7 @@ export const ProviderBar: React.FC<Props> = ({
                     <TooltipTrigger asChild>
                       <button
                         type="button"
-                        className="inline-flex h-7 items-center gap-1.5 rounded-md border border-gray-200 bg-gray-100 px-2 text-xs text-foreground dark:border-gray-700 dark:bg-gray-700"
+                        className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border/70 bg-surface-2 px-2 text-xs text-foreground"
                         title={`${jiraIssue.key} — ${jiraIssue.summary || ''}`}
                         onClick={() => {
                           try {
@@ -336,7 +336,7 @@ export const ProviderBar: React.FC<Props> = ({
                     <TooltipContent side="bottom" className="max-w-sm">
                       <div className="text-xs">
                         <div className="mb-1.5 flex min-w-0 items-center gap-2">
-                          <span className="inline-flex shrink-0 items-center gap-1.5 rounded border border-gray-200 bg-gray-100 px-1.5 py-0.5 dark:border-gray-700 dark:bg-gray-800">
+                          <span className="inline-flex shrink-0 items-center gap-1.5 rounded border border-border/70 bg-surface-3 px-1.5 py-0.5">
                             <img src={jiraLogo} alt="Jira" className="h-3.5 w-3.5" />
                             <span className="text-[11px] font-medium text-foreground">
                               {jiraIssue.key}
@@ -405,7 +405,7 @@ export const ProviderBar: React.FC<Props> = ({
                         'inline-flex h-7 items-center gap-1.5 rounded-md border px-2 text-xs',
                         c7TaskEnabled
                           ? 'border-emerald-500/50 bg-emerald-500/10 text-foreground'
-                          : 'border-gray-200 bg-gray-100 text-foreground dark:border-gray-700 dark:bg-gray-700',
+                          : 'border-border/70 bg-surface-2 text-foreground',
                       ].join(' ')}
                       title={
                         c7Enabled

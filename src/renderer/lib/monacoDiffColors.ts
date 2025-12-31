@@ -6,7 +6,7 @@
 
 export const MONACO_DIFF_COLORS = {
   dark: {
-    editorBackground: '#1e293b', // slate-800 dark grey/blue
+    editorBackground: '#241c16', // warm espresso background
     // Emerald (green) for additions - matching ChangesDiffModal's emerald-900/30
     insertedTextBackground: '#064e3b4D', // emerald-900 (#064e3b) with 30% opacity
     insertedLineBackground: '#064e3b66', // emerald-900 with 40% opacity for lines
@@ -15,7 +15,7 @@ export const MONACO_DIFF_COLORS = {
     removedLineBackground: '#88133766', // rose-900 with 40% opacity for lines
   },
   light: {
-    editorBackground: '#f8fafc', // slate-50 - light grey/white background
+    editorBackground: '#fbf6ee', // warm paper background
     // Emerald (green) for additions - matching ChangesDiffModal's emerald-50
     insertedTextBackground: '#10b98140', // emerald-500 with 25% opacity for subtle text highlight
     insertedLineBackground: '#ecfdf580', // emerald-50 (#ecfdf5) with 50% opacity for line background

@@ -462,9 +462,9 @@ const TaskModal: React.FC<TaskModalProps> = ({
                   </div>
 
                   {taskName && (
-                    <div className="flex items-center space-x-2 rounded-lg bg-gray-100 p-3 dark:bg-gray-700">
-                      <GitBranch className="h-4 w-4 flex-shrink-0 text-gray-500" />
-                      <span className="overflow-hidden break-all text-sm text-gray-600 dark:text-gray-400">
+                    <div className="flex items-center space-x-2 rounded-lg bg-surface-2 p-3">
+                      <GitBranch className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                      <span className="overflow-hidden break-all text-sm text-muted-foreground">
                         {normalizeTaskName(taskName)}
                       </span>
                     </div>
@@ -487,7 +487,7 @@ const TaskModal: React.FC<TaskModalProps> = ({
                   >
                     <AccordionItem value="advanced" className="border-none">
                       <AccordionTrigger
-                        className="flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border-none bg-gray-100 px-3 text-sm font-medium text-foreground hover:bg-gray-200 hover:no-underline dark:bg-gray-700 dark:hover:bg-gray-600 [&>svg]:h-4 [&>svg]:w-4 [&>svg]:shrink-0"
+                        className="flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border-none bg-surface-2 px-3 text-sm font-medium text-foreground hover:bg-surface-3 hover:no-underline [&>svg]:h-4 [&>svg]:w-4 [&>svg]:shrink-0"
                         onPointerDown={(e) => {
                           // Toggle immediately on pointer down to avoid a required second click
                           // when another element inside had focus.

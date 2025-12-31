@@ -15,7 +15,6 @@ import {
   ArrowDown,
   Command as CommandIcon,
   Option,
-  Palette,
 } from 'lucide-react';
 import { APP_SHORTCUTS } from '../hooks/useKeyboardShortcuts';
 
@@ -37,7 +36,6 @@ interface CommandPaletteProps {
   onOpenSettings?: () => void;
   onToggleLeftSidebar?: () => void;
   onToggleRightSidebar?: () => void;
-  onToggleTheme?: () => void;
   onGoHome?: () => void;
   onOpenProject?: () => void;
 }
@@ -65,7 +63,6 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
   onOpenSettings,
   onToggleLeftSidebar,
   onToggleRightSidebar,
-  onToggleTheme,
   onGoHome,
   onOpenProject,
 }) => {
@@ -178,22 +175,6 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
       });
     }
 
-    if (onToggleTheme) {
-      items.push({
-        id: 'toggle-theme',
-        label: 'Toggle Theme',
-        description: APP_SHORTCUTS.TOGGLE_THEME.description,
-        icon: <Palette className="h-4 w-4" />,
-        group: 'Toggles',
-        keywords: ['theme', 'dark', 'light', 'mode', 'toggle'],
-        shortcut: {
-          key: APP_SHORTCUTS.TOGGLE_THEME.key.toUpperCase(),
-          modifier: APP_SHORTCUTS.TOGGLE_THEME.modifier,
-        },
-        onSelect: () => runCommand(onToggleTheme),
-      });
-    }
-
     // Project commands
     projects.forEach((project) => {
       if (onSelectProject) {
@@ -239,7 +220,6 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
     onSelectTask,
     onToggleLeftSidebar,
     onToggleRightSidebar,
-    onToggleTheme,
     runCommand,
   ]);
 
