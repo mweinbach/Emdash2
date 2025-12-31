@@ -1,12 +1,13 @@
 use crate::runtime::run_blocking;
 use crate::storage;
+use include_dir::{include_dir, Dir};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
 use std::fs::{self, File};
-use std::io::Write;
+use std::io::{ErrorKind, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
@@ -18,6 +19,7 @@ use zip::CompressionMethod;
 const CURRENT_DB_FILENAME: &str = "emdash.db";
 const LEGACY_DB_FILENAMES: &[&str] = &["database.sqlite", "orcbench.db"];
 const LEGACY_DIRS: &[&str] = &["Electron", "emdash", "Emdash"];
+static EMBEDDED_MIGRATIONS: Dir = include_dir!("$CARGO_MANIFEST_DIR/../drizzle");
 
 pub struct DbState {
   conn: Mutex<Option<Connection>>,
@@ -288,27 +290,77 @@ pub fn database_path_string(app: &tauri::AppHandle) -> Option<String> {
     .map(|path| path.to_string_lossy().to_string())
 }
 
+fn is_migrations_dir(path: &Path) -> bool {
+  path.join("meta").join("_journal.json").exists()
+}
+
+fn write_embedded_dir(dir: &Dir, target: &Path) -> Result<(), String> {
+  for subdir in dir.dirs() {
+    let dir_path = target.join(subdir.path());
+    fs::create_dir_all(&dir_path).map_err(|err| err.to_string())?;
+    write_embedded_dir(subdir, target)?;
+  }
+  for file in dir.files() {
+    let path = target.join(file.path());
+    if let Some(parent) = path.parent() {
+      fs::create_dir_all(parent).map_err(|err| err.to_string())?;
+    }
+    fs::write(&path, file.contents()).map_err(|err| err.to_string())?;
+  }
+  Ok(())
+}
+
+fn write_embedded_migrations(target: &Path) -> Result<(), String> {
+  fs::create_dir_all(target).map_err(|err| err.to_string())?;
+  write_embedded_dir(&EMBEDDED_MIGRATIONS, target)
+}
+
+fn ensure_embedded_migrations(app: &tauri::AppHandle) -> Option<PathBuf> {
+  let base = app
+    .path()
+    .app_data_dir()
+    .ok()
+    .or_else(|| app.path().app_config_dir().ok())
+    .unwrap_or_else(|| storage::config_dir(app));
+  let target = base.join("drizzle");
+  if is_migrations_dir(&target) {
+    return Some(target);
+  }
+  if write_embedded_migrations(&target).is_ok() && is_migrations_dir(&target) {
+    return Some(target);
+  }
+  None
+}
+
 fn resolve_migrations_path(app: &tauri::AppHandle) -> Option<PathBuf> {
   let mut candidates: Vec<PathBuf> = Vec::new();
 
   if let Ok(resource_dir) = app.path().resource_dir() {
     candidates.push(resource_dir.join("drizzle"));
+    candidates.push(resource_dir.clone());
     if let Some(parent) = resource_dir.parent() {
       candidates.push(parent.join("drizzle"));
+      candidates.push(parent.to_path_buf());
     }
   }
 
   if let Ok(cwd) = std::env::current_dir() {
     candidates.push(cwd.join("drizzle"));
+    candidates.push(cwd.clone());
     if let Some(parent) = cwd.parent() {
       candidates.push(parent.join("drizzle"));
+      candidates.push(parent.to_path_buf());
       if let Some(grand) = parent.parent() {
         candidates.push(grand.join("drizzle"));
+        candidates.push(grand.to_path_buf());
       }
     }
   }
 
-  candidates.into_iter().find(|path| path.exists())
+  candidates
+    .into_iter()
+    .find(|path| path.is_dir() && is_migrations_dir(path))
+    .or_else(|| ensure_embedded_migrations(app))
 }
 
 fn open_database_with_path(app: &tauri::AppHandle) -> Result<(Connection, PathBuf), String> {
@@ -602,6 +654,48 @@ fn write_backup_zip(db_path: &Path, zip_path: &Path, created_at: i64) -> Result<
 
   zip.finish().map_err(|err| err.to_string())?;
   Ok(())
+}
+
+fn db_sidecar_paths(db_path: &Path) -> Vec<PathBuf> {
+  let base = db_path.to_string_lossy().to_string();
+  vec![
+    PathBuf::from(format!("{base}-wal")),
+    PathBuf::from(format!("{base}-shm")),
+    PathBuf::from(format!("{base}-journal")),
+  ]
+}
+
+fn remove_db_sidecars(db_path: &Path) -> Result<(), String> {
+  let mut errors: Vec<String> = Vec::new();
+  for path in db_sidecar_paths(db_path) {
+    match fs::remove_file(&path) {
+      Ok(_) => {}
+      Err(err) if err.kind() == ErrorKind::NotFound => {}
+      Err(err) => errors.push(format!("{}: {}", path.to_string_lossy(), err)),
+    }
+  }
+  if errors.is_empty() {
+    Ok(())
+  } else {
+    Err(errors.join("; "))
+  }
+}
+
+fn remove_db_files(db_path: &Path) -> Result<(), String> {
+  let mut errors: Vec<String> = Vec::new();
+  match fs::remove_file(db_path) {
+    Ok(_) => {}
+    Err(err) if err.kind() == ErrorKind::NotFound => {}
+    Err(err) => errors.push(format!("{}: {}", db_path.to_string_lossy(), err)),
+  }
+  if let Err(err) = remove_db_sidecars(db_path) {
+    errors.push(err);
+  }
+  if errors.is_empty() {
+    Ok(())
+  } else {
+    Err(errors.join("; "))
+  }
 }
 
 fn metadata_to_string(meta: Option<Value>) -> Option<String> {
@@ -1541,13 +1635,35 @@ pub async fn db_backup_and_reset(app: tauri::AppHandle) -> Value {
       let _ = state.replace_conn(None);
       state.set_disabled(true);
 
+      let reopen_db = || -> Result<(), String> {
+        match open_database_with_path(&app) {
+          Ok((conn, _)) => {
+            state.replace_conn(Some(conn))?;
+            state.set_disabled(false);
+            init_state.clear();
+            Ok(())
+          }
+          Err(err) => {
+            init_state.set(DbInitErrorInfo {
+              message: err.clone(),
+              db_path: database_path_string(&app),
+            });
+            Err(err)
+          }
+        }
+      };
+
       let db_path = match resolve_database_path(&app) {
         Ok(path) => path,
-        Err(err) => return json!({ "success": false, "error": err }),
+        Err(err) => {
+          let _ = reopen_db();
+          return json!({ "success": false, "error": err });
+        }
       };
 
       let db_path_str = db_path.to_string_lossy().to_string();
       if !db_path.exists() {
+        let _ = reopen_db();
         return json!({
           "success": false,
           "error": "Database file not found",
@@ -1558,6 +1674,7 @@ pub async fn db_backup_and_reset(app: tauri::AppHandle) -> Value {
       let created_at = backup_timestamp();
       let zip_path = download_dir(&app).join(format!("emdash-db-backup-{}.zip", created_at));
       if let Err(err) = write_backup_zip(&db_path, &zip_path, created_at) {
+        let _ = reopen_db();
         return json!({
           "success": false,
           "error": err,
@@ -1578,9 +1695,21 @@ pub async fn db_backup_and_reset(app: tauri::AppHandle) -> Value {
       });
 
       if let Err(err) = move_result {
+        let _ = reopen_db();
         return json!({
           "success": false,
           "error": err.to_string(),
+          "dbPath": db_path_str,
+          "backupPath": zip_path.to_string_lossy(),
+          "movedPath": moved_path.to_string_lossy()
+        });
+      }
+
+      if let Err(err) = remove_db_sidecars(&db_path) {
+        let _ = reopen_db();
+        return json!({
+          "success": false,
+          "error": format!("Failed to remove database sidecars: {}", err),
           "dbPath": db_path_str,
           "backupPath": zip_path.to_string_lossy(),
           "movedPath": moved_path.to_string_lossy()
@@ -1592,6 +1721,14 @@ pub async fn db_backup_and_reset(app: tauri::AppHandle) -> Value {
           Ok(_) => {
             state.set_disabled(false);
             init_state.clear();
+            if let Err(err) = remove_db_files(&moved_path) {
+              return json!({
+                "success": false,
+                "error": format!("Failed to remove old database: {}", err),
+                "backupPath": zip_path.to_string_lossy(),
+                "movedPath": moved_path.to_string_lossy()
+              });
+            }
             json!({
               "success": true,
               "backupPath": zip_path.to_string_lossy(),

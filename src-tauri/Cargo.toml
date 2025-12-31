@@ -1,6 +1,6 @@
 [package]
 name = "emdash"
-version = "0.3.43"
+version = "0.4.0"
 description = "Emdash desktop app"
 authors = ["Emdash Contributors"]
 edition = "2021"
@@ -28,6 +28,7 @@ rand = "0.8"
 semver = "1"
 sha1 = "0.10"
 zip = "0.6.6"
+include_dir = "0.7"
 
 [features]
 custom-protocol = ["tauri/custom-protocol"]

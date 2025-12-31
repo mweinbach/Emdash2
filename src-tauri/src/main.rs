@@ -16,6 +16,7 @@ mod pty;
 mod providers;
 mod runtime;
 mod settings;
+mod system_env;
 mod storage;
 mod terminal_snapshots;
 mod telemetry;
@@ -128,6 +129,7 @@ fn telemetry_capture(
 }
 
 fn main() {
+  system_env::bootstrap();
   let result = tauri::Builder::default()
     .setup(|app| {
       app.manage(db::DbInitErrorState::default());
