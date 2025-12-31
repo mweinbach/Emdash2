@@ -3,6 +3,7 @@ import { Repo, Run } from '../types';
 import RunLauncher from './RunLauncher';
 import RunList from './RunList';
 import { FolderOpen } from 'lucide-react';
+import AnimatedWordmark from './AnimatedWordmark';
 
 interface MainContentProps {
   selectedRepo: Repo | null;
@@ -31,16 +32,7 @@ const MainContent: React.FC<MainContentProps> = ({
       <div className="flex flex-1 items-center justify-center bg-background">
         <div className="text-center">
           <div className="mb-8">
-            <h1
-              className="mb-4 text-6xl font-bold text-foreground"
-              style={{
-                fontFamily: 'monospace',
-                letterSpacing: '0.1em',
-                textShadow: '2px 2px 0px rgba(0, 0, 0, 0.2)',
-              }}
-            >
-              Emdash
-            </h1>
+            <AnimatedWordmark className="mb-4" text="Emdash2" />
             <h2 className="text-2xl text-muted-foreground">Codex</h2>
           </div>
 

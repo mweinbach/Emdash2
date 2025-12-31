@@ -48,7 +48,7 @@ const DatabaseRecoveryModal: React.FC<DatabaseRecoveryModalProps> = ({
               Database needs attention
             </AlertDialogTitle>
             <AlertDialogDescription className="text-sm text-muted-foreground">
-              Emdash couldn&apos;t open its database. You can retry the migration or create a
+              Emdash2 couldn&apos;t open its database. You can retry the migration or create a
               backup and start fresh.
             </AlertDialogDescription>
           </div>

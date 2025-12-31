@@ -24,14 +24,16 @@
 
 <br />
 
-# Emdash (Tauri + Rust)
+# Emdash2 (macOS)
 
 > **Emdash2 is a fork of [generalaction/emdash](https://github.com/generalaction/emdash).**  
-> The desktop shell is now **Tauri + Rust**.
+> Full credit to the upstream Emdash project and its contributors.
 
 **Run multiple coding agents in parallel**
 
-Emdash lets you develop and test multiple features with multiple agents in parallel. It’s provider-agnostic (supports 15+ CLI agents, such as Claude Code, Qwen Code, Amp, and Codex) and runs each agent in its own Git worktree to keep changes clean; Hand off Linear, GitHub, or Jira tickets to an agent and review diffs side-by-side.
+Emdash2 is a macOS-focused fork of Emdash with a Tauri + Rust desktop shell and a Ghostty-powered terminal.
+
+Emdash2 lets you develop and test multiple features with multiple agents in parallel. It’s provider-agnostic (supports 15+ CLI agents, such as Claude Code, Qwen Code, Amp, and Codex) and runs each agent in its own Git worktree to keep changes clean; Hand off Linear, GitHub, or Jira tickets to an agent and review diffs side-by-side.
 
 <div align="center" style="margin:24px 0;">
 
@@ -67,7 +69,7 @@ Emdash lets you develop and test multiple features with multiple agents in paral
 
 ### Supported CLI Providers
 
-Emdash currently supports fifteen CLI providers and we are adding new providers regularly. If you miss one, let us know or create a PR. 
+Emdash2 currently supports fifteen CLI providers and we are adding new providers regularly. If you miss one, let us know or create a PR. 
 
 | CLI Provider | Status | Install |
 | ----------- | ------ | ----------- |
@@ -89,7 +91,7 @@ Emdash currently supports fifteen CLI providers and we are adding new providers 
 
 ### Issues
 
-Emdash allows you to pass tickets straight from Linear, GitHub, or Jira to your coding agent. 
+Emdash2 allows you to pass tickets straight from Linear, GitHub, or Jira to your coding agent. 
 
 | Tool | Status | Authentication |
 | ----------- | ------ | ----------- |
@@ -151,7 +153,7 @@ Contributions welcome! See the [Contributing Guide](CONTRIBUTING.md) to get star
 <details>
 <summary><b>Do I need GitHub CLI?</b></summary>
 
-> **Only if you want GitHub features** (open PRs from Emdash, fetch repo info, GitHub Issues integration).  
+> **Only if you want GitHub features** (open PRs from Emdash2, fetch repo info, GitHub Issues integration).  
 > Install & sign in:
 >
 > ```bash
@@ -164,7 +166,7 @@ Contributions welcome! See the [Contributing Guide](CONTRIBUTING.md) to get star
 <details>
 <summary><b>How do I add a new provider?</b></summary>
 
-> Emdash is **provider‑agnostic** and built to add CLIs quickly.
+> Emdash2 is **provider‑agnostic** and built to add CLIs quickly.
 >
 > - Open a PR following the **Contributing Guide** (`CONTRIBUTING.md`).
 > - Include: provider name, how it’s invoked (CLI command), auth notes, and minimal setup steps.
@@ -190,13 +192,13 @@ Contributions welcome! See the [Contributing Guide](CONTRIBUTING.md) to get star
 </details>
 
 <details>
-<summary><b>What permissions does Emdash need?</b></summary>
+<summary><b>What permissions does Emdash2 need?</b></summary>
 
 > - **Filesystem/Git:** to read/write your repo and create **Git worktrees** for isolation.  
 > - **Network:** only for provider CLIs you choose to use (e.g., Codex, Claude) and optional GitHub actions.  
 > - **Local DB:** to store your app state in SQLite on your machine.
 >
-> Emdash itself does **not** send your code or chats to any servers. Third‑party CLIs may transmit data per their policies.
+> Emdash2 itself does **not** send your code or chats to any servers. Third‑party CLIs may transmit data per their policies.
 </details>
 
 [![Follow @rabanspiegel](https://img.shields.io/twitter/follow/rabanspiegel?style=social&label=Follow%20%40rabanspiegel)](https://x.com/rabanspiegel)

@@ -13,7 +13,7 @@ const FirstLaunchModal: React.FC<FirstLaunchModalProps> = ({ open, onClose }) =>
     <AlertDialog open={open} onOpenChange={(next) => !next && onClose()}>
       <AlertDialogContent className="max-w-3xl border-border/70 bg-gradient-to-br from-background via-background/90 to-muted/60 shadow-2xl">
         <AlertDialogTitle className="text-center text-2xl font-semibold leading-tight">
-          Welcome to Emdash
+          Welcome to Emdash2
         </AlertDialogTitle>
         <div className="space-y-4">
           <p className="text-center text-sm text-muted-foreground">

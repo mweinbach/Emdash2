@@ -101,6 +101,34 @@ body {
   animation: shimmer-move 1.4s linear infinite;
 }
 
+@keyframes wordmarkDashGlint {
+  0% {
+    transform: translateX(-10px);
+    opacity: 0.35;
+    filter: blur(0px);
+  }
+  45% {
+    transform: translateX(0px);
+    opacity: 0.9;
+    filter: blur(0px);
+  }
+  100% {
+    transform: translateX(10px);
+    opacity: 0.35;
+    filter: blur(0px);
+  }
+}
+
+.wordmark-dash {
+  animation: wordmarkDashGlint 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wordmark-dash {
+    animation: none;
+  }
+}
+
 .flex-col {
   flex-direction: column;
 }

@@ -64,10 +64,10 @@ const Context7SettingsCard: React.FC = () => {
         <div className="text-[11px] leading-snug text-muted-foreground">
           <p>
             You must configure Context7 MCP in your coding agent (Codex, Claude Code, Cursor, etc.)
-            before using it in Emdash.
+            before using it in Emdash2.
           </p>
           <p className="mt-1">
-            After setup, enabling Context7 here lets Emdash invoke it in your terminal sessions so
+            After setup, enabling Context7 here lets Emdash2 invoke it in your terminal sessions so
             agents can fetch up‑to‑date docs when needed. Use the Docs link for per‑agent setup.
           </p>
         </div>
@@ -98,7 +98,7 @@ const Context7SettingsCard: React.FC = () => {
         <FeedbackModal
           isOpen={showMcpFeedback}
           onClose={() => setShowMcpFeedback(false)}
-          blurb="Which MCP would you like Emdash to support next? Include the MCP name, link, and why it helps your workflow."
+          blurb="Which MCP would you like Emdash2 to support next? Include the MCP name, link, and why it helps your workflow."
         />
       ) : null}
     </div>

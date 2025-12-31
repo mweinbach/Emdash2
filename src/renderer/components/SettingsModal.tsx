@@ -179,7 +179,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           { title: 'In‑app Browser Preview', render: () => <BrowserPreviewSettingsCard /> },
           { title: 'Project prep', render: () => <ProjectPrepSettingsCard /> },
           {
-            title: 'How to use Emdash',
+            title: 'How to use Emdash2',
             render: () => (
               <div className="flex items-center">
                 <Button

@@ -2,8 +2,7 @@ import { motion } from 'framer-motion';
 import { FolderOpen, Github, Plus } from 'lucide-react';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { ImperativePanelHandle } from 'react-resizable-panels';
-import emdashLogo from '../assets/images/emdash/emdash_logo.svg';
-import emdashLogoWhite from '../assets/images/emdash/emdash_logo_white.svg';
+import AnimatedWordmark from './components/AnimatedWordmark';
 import AppKeyboardShortcuts from './components/AppKeyboardShortcuts';
 import BrowserPane from './components/BrowserPane';
 import ChatInterface from './components/ChatInterface';
@@ -228,7 +227,7 @@ const AppContent: React.FC = () => {
       if (result?.success) {
         toast({
           title: 'Database recovered',
-          description: 'Reloading Emdash with the repaired database.',
+          description: 'Reloading Emdash2 with the repaired database.',
         });
         setDbInitError(null);
         setTimeout(() => window.location.reload(), 400);
@@ -668,10 +667,10 @@ const AppContent: React.FC = () => {
             } else {
               const updateHint =
                 platform === 'darwin'
-                  ? 'Tip: Update GitHub CLI with: brew upgrade gh — then restart Emdash.'
+                  ? 'Tip: Update GitHub CLI with: brew upgrade gh — then restart Emdash2.'
                   : platform === 'win32'
-                    ? 'Tip: Update GitHub CLI with: winget upgrade GitHub.cli — then restart Emdash.'
-                    : 'Tip: Update GitHub CLI via your package manager (e.g., apt/dnf) and restart Emdash.';
+                    ? 'Tip: Update GitHub CLI with: winget upgrade GitHub.cli — then restart Emdash2.'
+                    : 'Tip: Update GitHub CLI via your package manager (e.g., apt/dnf) and restart Emdash2.';
               toast({
                 title: 'GitHub Connection Failed',
                 description: `Git repository detected but couldn't connect to GitHub: ${githubInfo.error}\n\n${updateHint}`,
@@ -1880,28 +1879,7 @@ const AppContent: React.FC = () => {
           <div className="container mx-auto flex min-h-full max-w-3xl flex-1 flex-col justify-center px-8 py-8">
             <div className="mb-6 text-center">
               <div className="mb-2 flex items-center justify-center">
-                <div className="logo-shimmer-container">
-                  <img
-                    key={effectiveTheme}
-                    src={effectiveTheme === 'dark' ? emdashLogoWhite : emdashLogo}
-                    alt="Emdash"
-                    className="logo-shimmer-image"
-                  />
-                  <span
-                    className="logo-shimmer-overlay"
-                    aria-hidden="true"
-                    style={{
-                      WebkitMaskImage: `url(${effectiveTheme === 'dark' ? emdashLogoWhite : emdashLogo})`,
-                      maskImage: `url(${effectiveTheme === 'dark' ? emdashLogoWhite : emdashLogo})`,
-                      WebkitMaskRepeat: 'no-repeat',
-                      maskRepeat: 'no-repeat',
-                      WebkitMaskSize: 'contain',
-                      maskSize: 'contain',
-                      WebkitMaskPosition: 'center',
-                      maskPosition: 'center',
-                    }}
-                  />
-                </div>
+                <AnimatedWordmark text="Emdash2" className="mb-0" />
               </div>
               <p className="whitespace-nowrap text-xs text-muted-foreground">
                 Run multiple Coding Agents in parallel

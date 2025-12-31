@@ -177,6 +177,69 @@
     }
   }
 
+  @keyframes wordmarkShimmerSweep {
+    0% {
+      background-position: 0% 50%;
+    }
+    100% {
+      background-position: 200% 50%;
+    }
+  }
+
+  .wordmark-shimmer {
+    background: linear-gradient(
+      90deg,
+      hsl(var(--foreground)) 0%,
+      hsl(var(--foreground)) 35%,
+      hsl(var(--foreground) / 0.35) 50%,
+      hsl(var(--foreground)) 65%,
+      hsl(var(--foreground)) 100%
+    );
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: wordmarkShimmerSweep 2.4s linear infinite;
+  }
+
+  @keyframes wordmarkDashGlint {
+    0% {
+      transform: translateX(-10px);
+      opacity: 0.35;
+      filter: blur(0px);
+    }
+    45% {
+      transform: translateX(0px);
+      opacity: 0.9;
+      filter: blur(0px);
+    }
+    100% {
+      transform: translateX(10px);
+      opacity: 0.35;
+      filter: blur(0px);
+    }
+  }
+
+  .wordmark-dash {
+    display: inline-block;
+    animation: wordmarkDashGlint 1.6s ease-in-out infinite;
+    will-change: transform, opacity;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .wordmark-dash {
+      animation: none;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .wordmark-shimmer {
+      animation: none;
+      background: none;
+      color: hsl(var(--foreground));
+    }
+  }
+
   h1,
   h2,
   h3,

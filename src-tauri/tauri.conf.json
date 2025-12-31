@@ -1,5 +1,5 @@
 {
-  "productName": "emdash",
+  "productName": "Emdash2",
   "version": "0.4.2",
   "identifier": "com.emdash2",
   "build": {
@@ -11,7 +11,7 @@
   "app": {
     "windows": [
       {
-        "title": "Emdash",
+        "title": "Emdash2",
         "titleBarStyle": "Overlay",
         "hiddenTitle": true,
         "width": 1400,
