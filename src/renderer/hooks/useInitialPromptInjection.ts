@@ -28,13 +28,13 @@ export function useInitialPromptInjection(opts: {
     const send = () => {
       try {
         if (sent) return;
-        (window as any).electronAPI?.ptyInput?.({ id: ptyId, data: trimmed + '\n' });
+        (window as any).desktopAPI?.ptyInput?.({ id: ptyId, data: trimmed + '\n' });
         localStorage.setItem(sentKey, '1');
         sent = true;
       } catch {}
     };
 
-    const offData = (window as any).electronAPI?.onPtyData?.(ptyId, (chunk: string) => {
+    const offData = (window as any).desktopAPI?.onPtyData?.(ptyId, (chunk: string) => {
       // Debounce-based idle: send after a short period of silence
       if (silenceTimer) clearTimeout(silenceTimer);
       silenceTimer = setTimeout(() => {
@@ -52,7 +52,7 @@ export function useInitialPromptInjection(opts: {
         // ignore classifier errors; rely on silence debounce
       }
     });
-    const offStarted = (window as any).electronAPI?.onPtyStarted?.((info: { id: string }) => {
+    const offStarted = (window as any).desktopAPI?.onPtyStarted?.((info: { id: string }) => {
       if (info?.id === ptyId) {
         // Start a silence timer in case no output arrives (rare but possible)
         if (silenceTimer) clearTimeout(silenceTimer);

@@ -2,7 +2,7 @@ export {};
 
 declare global {
   interface Window {
-    electronAPI: {
+    desktopAPI: {
       fsWriteFile: (
         root: string,
         relPath: string,

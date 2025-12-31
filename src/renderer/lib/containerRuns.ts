@@ -141,7 +141,7 @@ function updateTaskState(event: RunnerEvent) {
 
 function ensureSubscribed() {
   if (subscribed) return;
-  const api = (window as any).electronAPI;
+  const api = (window as any).desktopAPI;
   if (!api?.onRunEvent) return;
   subscribed = true;
   try {
@@ -206,7 +206,7 @@ export function getContainerRunState(taskId: string): ContainerRunState | undefi
 
 export async function startContainerRun(args: StartRunArgs) {
   ensureSubscribed();
-  const api = (window as any).electronAPI;
+  const api = (window as any).desktopAPI;
   const taskId = clean(args.taskId);
   const taskPath = clean(args.taskPath);
   const runId = clean(args.runId);
@@ -237,7 +237,7 @@ export async function startContainerRun(args: StartRunArgs) {
 }
 
 export function resetContainerRunListeners() {
-  const api = (window as any).electronAPI;
+  const api = (window as any).desktopAPI;
   try {
     api?.removeRunEventListeners?.();
   } catch (error) {
@@ -282,7 +282,7 @@ export function subscribeToAllRunStates(
  */
 export async function refreshTaskRunState(taskId: string) {
   ensureSubscribed();
-  const api = (window as any).electronAPI;
+  const api = (window as any).desktopAPI;
   if (!api?.inspectContainerRun) return;
   try {
     const res = await api.inspectContainerRun(taskId);

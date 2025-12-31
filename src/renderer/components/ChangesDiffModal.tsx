@@ -114,7 +114,7 @@ export const ChangesDiffModal: React.FC<ChangesDiffModalProps> = ({
 
       try {
         // Get diff lines
-        const diffRes = await window.electronAPI.getFileDiff({ taskPath, filePath });
+        const diffRes = await window.desktopAPI.getFileDiff({ taskPath, filePath });
         if (!diffRes?.success || !diffRes.diff) {
           throw new Error(diffRes?.error || 'Failed to load diff');
         }
@@ -129,7 +129,7 @@ export const ChangesDiffModal: React.FC<ChangesDiffModalProps> = ({
           originalContent = converted.original;
           modifiedContent = '';
         } else if (selectedFile.status === 'added') {
-          const readRes = await window.electronAPI.fsRead(taskPath, filePath, 2 * 1024 * 1024);
+          const readRes = await window.desktopAPI.fsRead(taskPath, filePath, 2 * 1024 * 1024);
           if (readRes?.success && readRes.content) {
             modifiedContent = readRes.content;
             originalContent = '';
@@ -146,7 +146,7 @@ export const ChangesDiffModal: React.FC<ChangesDiffModalProps> = ({
 
           // Try to read actual current content for better accuracy
           try {
-            const readRes = await window.electronAPI.fsRead(taskPath, filePath, 2 * 1024 * 1024);
+            const readRes = await window.desktopAPI.fsRead(taskPath, filePath, 2 * 1024 * 1024);
             if (readRes?.success && readRes.content) {
               modifiedContent = readRes.content;
             }
@@ -414,7 +414,7 @@ export const ChangesDiffModal: React.FC<ChangesDiffModalProps> = ({
     setIsSaving(true);
     setSaveError(null);
     try {
-      const res = await window.electronAPI.fsWriteFile(taskPath, selected, modifiedDraft, true);
+      const res = await window.desktopAPI.fsWriteFile(taskPath, selected, modifiedDraft, true);
       if (!res?.success) {
         throw new Error(res?.error || 'Failed to save file');
       }

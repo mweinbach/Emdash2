@@ -145,7 +145,7 @@ const AppContent: React.FC = () => {
 
     const waitForRuntimeReady = (timeoutMs = 1500) =>
       new Promise<void>((resolve) => {
-        const api: any = (window as any).electronAPI;
+        const api: any = (window as any).desktopAPI;
         if (api?.__runtimeReady) {
           resolve();
           return;
@@ -167,7 +167,7 @@ const AppContent: React.FC = () => {
       });
 
     const checkDbInitError = async () => {
-      const api: any = (window as any).electronAPI;
+      const api: any = (window as any).desktopAPI;
       if (!api?.getDbInitError) return;
       if (api?.__runtime === 'tauri' && !api?.__runtimeReady) {
         await waitForRuntimeReady();
@@ -192,7 +192,7 @@ const AppContent: React.FC = () => {
 
     let off: (() => void) | null = null;
     const attachListener = async () => {
-      const api: any = (window as any).electronAPI;
+      const api: any = (window as any).desktopAPI;
       if (api?.__runtime === 'tauri' && !api?.__runtimeReady) {
         await waitForRuntimeReady();
       }
@@ -220,10 +220,10 @@ const AppContent: React.FC = () => {
   }, []);
 
   const handleDbRetry = useCallback(async () => {
-    if (!window?.electronAPI?.dbRetryInit) return;
+    if (!window?.desktopAPI?.dbRetryInit) return;
     setDbRecoveryBusy('retry');
     try {
-      const result = await window.electronAPI.dbRetryInit();
+      const result = await window.desktopAPI.dbRetryInit();
       if (result?.success) {
         toast({
           title: 'Database recovered',
@@ -247,10 +247,10 @@ const AppContent: React.FC = () => {
   }, [toast]);
 
   const handleDbBackupAndReset = useCallback(async () => {
-    if (!window?.electronAPI?.dbBackupAndReset) return;
+    if (!window?.desktopAPI?.dbBackupAndReset) return;
     setDbRecoveryBusy('backup');
     try {
-      const result = await window.electronAPI.dbBackupAndReset();
+      const result = await window.desktopAPI.dbBackupAndReset();
       if (result?.success) {
         const location = result?.backupPath
           ? `Backup saved to ${result.backupPath}.`
@@ -509,9 +509,9 @@ const AppContent: React.FC = () => {
     const loadAppData = async () => {
       try {
         const [appVersion, appPlatform, projects] = await Promise.all([
-          window.electronAPI.getAppVersion(),
-          window.electronAPI.getPlatform(),
-          window.electronAPI.getProjects(),
+          window.desktopAPI.getAppVersion(),
+          window.desktopAPI.getPlatform(),
+          window.desktopAPI.getProjects(),
         ]);
 
         setVersion(appVersion);
@@ -524,7 +524,7 @@ const AppContent: React.FC = () => {
 
         const projectsWithTasks = await Promise.all(
           initialProjects.map(async (project) => {
-            const tasks = await window.electronAPI.getTasks(project.id);
+            const tasks = await window.desktopAPI.getTasks(project.id);
             return withRepoKey({ ...project, tasks }, appPlatform);
           })
         );
@@ -551,7 +551,7 @@ const AppContent: React.FC = () => {
     let cancelled = false;
     const waitForRuntimeReady = (timeoutMs = 1500) =>
       new Promise<void>((resolve) => {
-        const api: any = (window as any).electronAPI;
+        const api: any = (window as any).desktopAPI;
         if (api?.__runtimeReady) {
           resolve();
           return;
@@ -573,7 +573,7 @@ const AppContent: React.FC = () => {
       });
 
     const refreshCliProviders = async () => {
-      const api: any = (window as any).electronAPI;
+      const api: any = (window as any).desktopAPI;
       if (!api?.getProviderStatuses) return;
       if (api?.__runtime !== 'tauri') return;
       await waitForRuntimeReady();
@@ -593,10 +593,10 @@ const AppContent: React.FC = () => {
     const { captureTelemetry } = await import('./lib/telemetryClient');
     captureTelemetry('project_add_clicked');
     try {
-      const result = await window.electronAPI.openProject();
+      const result = await window.desktopAPI.openProject();
       if (result.success && result.path) {
         try {
-          const gitInfo = await window.electronAPI.getGitInfo(result.path);
+          const gitInfo = await window.desktopAPI.getGitInfo(result.path);
           const canonicalPath = gitInfo.rootPath || gitInfo.path || result.path;
           const repoKey = normalizePathForComparison(canonicalPath, platform);
           const existingProject = projects.find(
@@ -641,7 +641,7 @@ const AppContent: React.FC = () => {
           };
 
           if (isAuthenticated && isGithubRemote) {
-            const githubInfo = await window.electronAPI.connectToGitHub(canonicalPath);
+            const githubInfo = await window.desktopAPI.connectToGitHub(canonicalPath);
             if (githubInfo.success) {
               const projectWithGithub = withRepoKey(
                 {
@@ -654,7 +654,7 @@ const AppContent: React.FC = () => {
                 platform
               );
 
-              const saveResult = await window.electronAPI.saveProject(projectWithGithub);
+              const saveResult = await window.desktopAPI.saveProject(projectWithGithub);
               if (saveResult.success) {
                 const { captureTelemetry } = await import('./lib/telemetryClient');
                 captureTelemetry('project_added_success', { source: 'github' });
@@ -689,7 +689,7 @@ const AppContent: React.FC = () => {
               platform
             );
 
-            const saveResult = await window.electronAPI.saveProject(projectWithoutGithub);
+            const saveResult = await window.desktopAPI.saveProject(projectWithoutGithub);
             if (saveResult.success) {
               const { captureTelemetry } = await import('./lib/telemetryClient');
               captureTelemetry('project_added_success', { source: 'local' });
@@ -773,7 +773,7 @@ const AppContent: React.FC = () => {
       const { captureTelemetry } = await import('./lib/telemetryClient');
       captureTelemetry('project_cloned');
       try {
-        const gitInfo = await window.electronAPI.getGitInfo(projectPath);
+        const gitInfo = await window.desktopAPI.getGitInfo(projectPath);
         const canonicalPath = gitInfo.rootPath || gitInfo.path || projectPath;
         const repoKey = normalizePathForComparison(canonicalPath, platform);
         const existingProject = projects.find(
@@ -804,7 +804,7 @@ const AppContent: React.FC = () => {
         };
 
         if (isAuthenticated && isGithubRemote) {
-          const githubInfo = await window.electronAPI.connectToGitHub(canonicalPath);
+          const githubInfo = await window.desktopAPI.connectToGitHub(canonicalPath);
           if (githubInfo.success) {
             const projectWithGithub = withRepoKey(
               {
@@ -817,7 +817,7 @@ const AppContent: React.FC = () => {
               platform
             );
 
-            const saveResult = await window.electronAPI.saveProject(projectWithGithub);
+            const saveResult = await window.desktopAPI.saveProject(projectWithGithub);
             if (saveResult.success) {
               captureTelemetry('project_clone_success');
               captureTelemetry('project_added_success', { source: 'clone' });
@@ -844,7 +844,7 @@ const AppContent: React.FC = () => {
               platform
             );
 
-            const saveResult = await window.electronAPI.saveProject(projectWithoutGithub);
+            const saveResult = await window.desktopAPI.saveProject(projectWithoutGithub);
             if (saveResult.success) {
               captureTelemetry('project_clone_success');
               captureTelemetry('project_added_success', { source: 'clone' });
@@ -864,7 +864,7 @@ const AppContent: React.FC = () => {
             platform
           );
 
-          const saveResult = await window.electronAPI.saveProject(projectWithoutGithub);
+          const saveResult = await window.desktopAPI.saveProject(projectWithoutGithub);
           if (saveResult.success) {
             captureTelemetry('project_clone_success');
             captureTelemetry('project_added_success', { source: 'clone' });
@@ -890,7 +890,7 @@ const AppContent: React.FC = () => {
       const { captureTelemetry } = await import('./lib/telemetryClient');
       captureTelemetry('new_project_created');
       try {
-        const gitInfo = await window.electronAPI.getGitInfo(projectPath);
+        const gitInfo = await window.desktopAPI.getGitInfo(projectPath);
         const canonicalPath = gitInfo.rootPath || gitInfo.path || projectPath;
         const repoKey = normalizePathForComparison(canonicalPath, platform);
         const existingProject = projects.find(
@@ -921,7 +921,7 @@ const AppContent: React.FC = () => {
         };
 
         if (isAuthenticated && isGithubRemote) {
-          const githubInfo = await window.electronAPI.connectToGitHub(canonicalPath);
+          const githubInfo = await window.desktopAPI.connectToGitHub(canonicalPath);
           if (githubInfo.success) {
             const projectWithGithub = withRepoKey(
               {
@@ -934,7 +934,7 @@ const AppContent: React.FC = () => {
               platform
             );
 
-            const saveResult = await window.electronAPI.saveProject(projectWithGithub);
+            const saveResult = await window.desktopAPI.saveProject(projectWithGithub);
             if (saveResult.success) {
               captureTelemetry('project_create_success');
               captureTelemetry('project_added_success', { source: 'new_project' });
@@ -970,7 +970,7 @@ const AppContent: React.FC = () => {
               platform
             );
 
-            const saveResult = await window.electronAPI.saveProject(projectWithoutGithub);
+            const saveResult = await window.desktopAPI.saveProject(projectWithoutGithub);
             if (saveResult.success) {
               captureTelemetry('project_create_success');
               captureTelemetry('project_added_success', { source: 'new_project' });
@@ -999,7 +999,7 @@ const AppContent: React.FC = () => {
             platform
           );
 
-          const saveResult = await window.electronAPI.saveProject(projectWithoutGithub);
+          const saveResult = await window.desktopAPI.saveProject(projectWithoutGithub);
           if (saveResult.success) {
             captureTelemetry('project_create_success');
             captureTelemetry('project_added_success', { source: 'new_project' });
@@ -1037,7 +1037,7 @@ const AppContent: React.FC = () => {
     try {
       // Check if gh CLI is installed
       setGithubStatusMessage('Checking for GitHub CLI...');
-      const cliInstalled = await window.electronAPI.githubCheckCLIInstalled();
+      const cliInstalled = await window.desktopAPI.githubCheckCLIInstalled();
 
       if (!cliInstalled) {
         // Detect platform for better messaging
@@ -1051,7 +1051,7 @@ const AppContent: React.FC = () => {
         }
 
         setGithubStatusMessage(installMessage);
-        const installResult = await window.electronAPI.githubInstallCLI();
+        const installResult = await window.desktopAPI.githubInstallCLI();
 
         if (!installResult.success) {
           setGithubLoading(false);
@@ -1121,7 +1121,7 @@ const AppContent: React.FC = () => {
           // Enrich linked issue with description from Linear, if available
           let issue = linkedLinearIssue;
           try {
-            const api: any = (window as any).electronAPI;
+            const api: any = (window as any).desktopAPI;
             let description: string | undefined;
             // Try bulk search first
             try {
@@ -1170,7 +1170,7 @@ const AppContent: React.FC = () => {
           // Enrich linked GitHub issue with body via gh if available
           let issue = linkedGithubIssue;
           try {
-            const api: any = (window as any).electronAPI;
+            const api: any = (window as any).desktopAPI;
             const res = await api?.githubIssueGet?.(selectedProject.path, linkedGithubIssue.number);
             if (res?.success) {
               const body: string | undefined = res?.issue?.body || res?.body;
@@ -1240,7 +1240,7 @@ const AppContent: React.FC = () => {
           for (let instanceIdx = 1; instanceIdx <= runs; instanceIdx++) {
             const instanceSuffix = runs > 1 ? `-${instanceIdx}` : '';
             const variantName = `${taskName}-${provider.toLowerCase()}${instanceSuffix}`;
-            const worktreeResult = await window.electronAPI.worktreeCreate({
+            const worktreeResult = await window.desktopAPI.worktreeCreate({
               projectPath: selectedProject.path,
               taskName: variantName,
               projectId: selectedProject.id,
@@ -1287,7 +1287,7 @@ const AppContent: React.FC = () => {
           metadata: multiMeta,
         };
 
-        const saveResult = await window.electronAPI.saveTask({
+        const saveResult = await window.desktopAPI.saveTask({
           ...newTask,
           agentId: primaryProvider,
           metadata: multiMeta,
@@ -1301,7 +1301,7 @@ const AppContent: React.FC = () => {
         }
       } else {
         // Create worktree
-        const worktreeResult = await window.electronAPI.worktreeCreate({
+        const worktreeResult = await window.desktopAPI.worktreeCreate({
           projectPath: selectedProject.path,
           taskName,
           projectId: selectedProject.id,
@@ -1325,7 +1325,7 @@ const AppContent: React.FC = () => {
           metadata: taskMetadata,
         };
 
-        const saveResult = await window.electronAPI.saveTask({
+        const saveResult = await window.desktopAPI.saveTask({
           ...newTask,
           agentId: primaryProvider,
           metadata: taskMetadata,
@@ -1342,7 +1342,7 @@ const AppContent: React.FC = () => {
       {
         if (taskMetadata?.linearIssue) {
           try {
-            const convoResult = await window.electronAPI.getOrCreateDefaultConversation(newTask.id);
+            const convoResult = await window.desktopAPI.getOrCreateDefaultConversation(newTask.id);
 
             if (convoResult?.success && convoResult.conversation?.id) {
               const issue = taskMetadata.linearIssue;
@@ -1374,7 +1374,7 @@ const AppContent: React.FC = () => {
                 lines.push(String((issue as any).description).trim());
               }
 
-              await window.electronAPI.saveMessage({
+              await window.desktopAPI.saveMessage({
                 id: `linear-context-${newTask.id}`,
                 conversationId: convoResult.conversation.id,
                 content: lines.join('\n'),
@@ -1392,7 +1392,7 @@ const AppContent: React.FC = () => {
         }
         if (taskMetadata?.githubIssue) {
           try {
-            const convoResult = await window.electronAPI.getOrCreateDefaultConversation(newTask.id);
+            const convoResult = await window.desktopAPI.getOrCreateDefaultConversation(newTask.id);
 
             if (convoResult?.success && convoResult.conversation?.id) {
               const issue = taskMetadata.githubIssue;
@@ -1430,7 +1430,7 @@ const AppContent: React.FC = () => {
                 lines.push(String((issue as any).body).trim());
               }
 
-              await window.electronAPI.saveMessage({
+              await window.desktopAPI.saveMessage({
                 id: `github-context-${newTask.id}`,
                 conversationId: convoResult.conversation.id,
                 content: lines.join('\n'),
@@ -1448,7 +1448,7 @@ const AppContent: React.FC = () => {
         }
         if (taskMetadata?.jiraIssue) {
           try {
-            const convoResult = await window.electronAPI.getOrCreateDefaultConversation(newTask.id);
+            const convoResult = await window.desktopAPI.getOrCreateDefaultConversation(newTask.id);
 
             if (convoResult?.success && convoResult.conversation?.id) {
               const issue: any = taskMetadata.jiraIssue;
@@ -1465,7 +1465,7 @@ const AppContent: React.FC = () => {
               if (details.length) lines.push(`Details: ${details.join(' • ')}`);
               if (issue.url) lines.push(`URL: ${issue.url}`);
 
-              await window.electronAPI.saveMessage({
+              await window.desktopAPI.saveMessage({
                 id: `jira-context-${newTask.id}`,
                 conversationId: convoResult.conversation.id,
                 content: lines.join('\n'),
@@ -1620,12 +1620,12 @@ const AppContent: React.FC = () => {
           } catch {}
         } catch {}
         try {
-          window.electronAPI.ptyKill?.(`task-${task.id}`);
+          window.desktopAPI.ptyKill?.(`task-${task.id}`);
         } catch {}
         try {
           for (const provider of TERMINAL_PROVIDER_IDS) {
             try {
-              window.electronAPI.ptyKill?.(`${provider}-main-${task.id}`);
+              window.desktopAPI.ptyKill?.(`${provider}-main-${task.id}`);
             } catch {}
           }
         } catch {}
@@ -1640,19 +1640,19 @@ const AppContent: React.FC = () => {
               terminalSessionRegistry.dispose(sessionId);
             } catch {}
             try {
-              await window.electronAPI.ptyClearSnapshot({ id: sessionId });
+              await window.desktopAPI.ptyClearSnapshot({ id: sessionId });
             } catch {}
           })
         );
 
         const [removeResult, deleteResult] = await Promise.allSettled([
-          window.electronAPI.worktreeRemove({
+          window.desktopAPI.worktreeRemove({
             projectPath: targetProject.path,
             worktreeId: task.id,
             worktreePath: task.path,
             branch: task.branch,
           }),
-          window.electronAPI.deleteTask(task.id),
+          window.desktopAPI.deleteTask(task.id),
         ]);
 
         if (removeResult.status !== 'fulfilled' || !removeResult.value?.success) {
@@ -1695,7 +1695,7 @@ const AppContent: React.FC = () => {
         });
 
         try {
-          const refreshedTasks = await window.electronAPI.getTasks(targetProject.id);
+          const refreshedTasks = await window.desktopAPI.getTasks(targetProject.id);
           setProjects((prev) =>
             prev.map((project) =>
               project.id === targetProject.id ? { ...project, tasks: refreshedTasks } : project
@@ -1768,7 +1768,7 @@ const AppContent: React.FC = () => {
 
   const handleDeleteProject = async (project: Project) => {
     try {
-      const res = await window.electronAPI.deleteProject(project.id);
+      const res = await window.desktopAPI.deleteProject(project.id);
       if (!res?.success) throw new Error(res?.error || 'Failed to delete project');
 
       const { captureTelemetry } = await import('./lib/telemetryClient');
@@ -1837,16 +1837,16 @@ const AppContent: React.FC = () => {
 
   // Subscribe to GitHub auth events from main process
   useEffect(() => {
-    const cleanupSuccess = window.electronAPI.onGithubAuthSuccess((data) => {
+    const cleanupSuccess = window.desktopAPI.onGithubAuthSuccess((data) => {
       handleDeviceFlowSuccess(data.user);
     });
 
-    const cleanupError = window.electronAPI.onGithubAuthError((data) => {
+    const cleanupError = window.desktopAPI.onGithubAuthError((data) => {
       handleDeviceFlowError(data.message || data.error);
     });
 
     // Listen for user info update (arrives after token is stored and gh CLI is authenticated)
-    const cleanupUserUpdated = window.electronAPI.onGithubAuthUserUpdated(async () => {
+    const cleanupUserUpdated = window.desktopAPI.onGithubAuthUserUpdated(async () => {
       // Refresh status when user info becomes available
       await checkStatus();
     });

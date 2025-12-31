@@ -12,7 +12,7 @@ const DefaultProviderSettingsCard: React.FC = () => {
 
   const load = useCallback(async () => {
     try {
-      const res = await window.electronAPI.getSettings();
+      const res = await window.desktopAPI.getSettings();
       if (res?.success && res.settings?.defaultProvider) {
         const provider = res.settings.defaultProvider;
         setDefaultProvider(isValidProviderId(provider) ? (provider as Provider) : DEFAULT_PROVIDER);
@@ -36,7 +36,7 @@ const DefaultProviderSettingsCard: React.FC = () => {
       captureTelemetry('default_provider_changed', { provider });
     });
     try {
-      const res = await window.electronAPI.updateSettings({ defaultProvider: provider });
+      const res = await window.desktopAPI.updateSettings({ defaultProvider: provider });
       if (res?.success && res.settings?.defaultProvider) {
         setDefaultProvider(res.settings.defaultProvider as Provider);
       }

@@ -12,7 +12,7 @@ const Context7SettingsCard: React.FC = () => {
 
   const refresh = React.useCallback(async () => {
     try {
-      const res = await window.electronAPI.getSettings();
+      const res = await window.desktopAPI.getSettings();
       if (res?.success && res.settings) {
         const flag = Boolean(res.settings.mcp?.context7?.enabled);
         setEnabled(flag);
@@ -27,7 +27,7 @@ const Context7SettingsCard: React.FC = () => {
   const onToggle = async (next: boolean) => {
     setBusy(true);
     try {
-      await window.electronAPI.updateSettings({ mcp: { context7: { enabled: next } } as any });
+      await window.desktopAPI.updateSettings({ mcp: { context7: { enabled: next } } as any });
       setEnabled(next);
     } finally {
       setBusy(false);
@@ -79,7 +79,7 @@ const Context7SettingsCard: React.FC = () => {
           variant="link"
           size="sm"
           className="h-auto p-0 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-          onClick={() => window.electronAPI.openExternal(CONTEXT7_INTEGRATION.docsUrl)}
+          onClick={() => window.desktopAPI.openExternal(CONTEXT7_INTEGRATION.docsUrl)}
         >
           Docs ↗
         </Button>

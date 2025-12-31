@@ -38,7 +38,7 @@ export const BrowserProvider: React.FC<{ children: React.ReactNode }> = ({ child
       captureTelemetry('browser_preview_url_navigated');
     });
     try {
-      const api: any = (window as any).electronAPI;
+      const api: any = (window as any).desktopAPI;
       if (api && typeof api.browserLoadURL === 'function') {
         api.browserLoadURL(next);
         return;
@@ -88,7 +88,7 @@ export const BrowserProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const goBack = React.useCallback(() => {
     try {
-      const api: any = (window as any).electronAPI;
+      const api: any = (window as any).desktopAPI;
       if (api && typeof api.browserGoBack === 'function') {
         api.browserGoBack();
         return;
@@ -99,7 +99,7 @@ export const BrowserProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, []);
   const goForward = React.useCallback(() => {
     try {
-      const api: any = (window as any).electronAPI;
+      const api: any = (window as any).desktopAPI;
       if (api && typeof api.browserGoForward === 'function') {
         api.browserGoForward();
         return;
@@ -110,7 +110,7 @@ export const BrowserProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, []);
   const reload = React.useCallback(() => {
     try {
-      const api: any = (window as any).electronAPI;
+      const api: any = (window as any).desktopAPI;
       if (api && typeof api.browserReload === 'function') {
         api.browserReload();
         return;

@@ -12,7 +12,7 @@ type ProjectSettingsPayload = {
 // Global type declarations for the desktop bridge API
 declare global {
   interface Window {
-    electronAPI: {
+    desktopAPI: {
       getVersion: () => Promise<string>;
       getPlatform: () => Promise<string>;
       // PTY management

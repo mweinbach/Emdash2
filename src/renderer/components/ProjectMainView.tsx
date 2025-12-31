@@ -85,7 +85,7 @@ function TaskRow({
     let cancelled = false;
     (async () => {
       try {
-        const api: any = (window as any).electronAPI;
+        const api: any = (window as any).desktopAPI;
         const candidates = [
           'docker-compose.build.yml',
           'docker-compose.dev.yml',
@@ -187,7 +187,7 @@ function TaskRow({
     e.stopPropagation();
     try {
       setIsStoppingContainer(true);
-      const res = await (window as any).electronAPI.stopContainerRun(ws.id);
+      const res = await (window as any).desktopAPI.stopContainerRun(ws.id);
       if (!res?.ok) {
         toast({
           title: 'Failed to stop container',
@@ -325,7 +325,7 @@ function TaskRow({
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (pr.url) window.electronAPI.openExternal(pr.url);
+                  if (pr.url) window.desktopAPI.openExternal(pr.url);
                 }}
                 className="inline-flex items-center gap-1 rounded border border-border bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
                 title={`${pr.title || 'Pull Request'} (#${pr.number})`}
@@ -558,8 +558,8 @@ const ProjectMainView: React.FC<ProjectMainViewProps> = ({
       for (const ws of selectedTasks) {
         try {
           const [statusRes, infoRes, rawPr] = await Promise.allSettled([
-            window.electronAPI.getGitStatus(ws.path),
-            window.electronAPI.getGitInfo(ws.path),
+            window.desktopAPI.getGitStatus(ws.path),
+            window.desktopAPI.getGitInfo(ws.path),
             refreshPrStatus(ws.path),
           ]);
 
@@ -637,7 +637,7 @@ const ProjectMainView: React.FC<ProjectMainViewProps> = ({
       setIsLoadingBranches(true);
       setBranchLoadError(null);
       try {
-        const res = await window.electronAPI.listRemoteBranches({ projectPath: project.path });
+        const res = await window.desktopAPI.listRemoteBranches({ projectPath: project.path });
         if (!res?.success) {
           throw new Error(res?.error || 'Failed to load remote branches');
         }
@@ -686,7 +686,7 @@ const ProjectMainView: React.FC<ProjectMainViewProps> = ({
       setBaseBranch(trimmed);
       setIsSavingBaseBranch(true);
       try {
-        const res = await window.electronAPI.updateProjectSettings({
+        const res = await window.desktopAPI.updateProjectSettings({
           projectId: project.id,
           baseRef: trimmed,
         });
@@ -735,7 +735,7 @@ const ProjectMainView: React.FC<ProjectMainViewProps> = ({
                           size="sm"
                           className="h-8 gap-1 px-3 text-xs font-medium"
                           onClick={() =>
-                            window.electronAPI.openExternal(
+                            window.desktopAPI.openExternal(
                               `https://github.com/${project.githubInfo?.repository}`
                             )
                           }

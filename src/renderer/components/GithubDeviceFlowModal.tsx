@@ -42,7 +42,7 @@ export function GithubDeviceFlowModal({
     if (!open) return;
 
     // Device code received - display to user
-    const cleanupDeviceCode = window.electronAPI.onGithubAuthDeviceCode((data) => {
+    const cleanupDeviceCode = window.desktopAPI.onGithubAuthDeviceCode((data) => {
       setUserCode(data.userCode);
       setVerificationUri(data.verificationUri);
       setExpiresIn(data.expiresIn);
@@ -68,14 +68,14 @@ export function GithubDeviceFlowModal({
           setBrowserOpening(false);
           if (!hasOpenedBrowser.current) {
             hasOpenedBrowser.current = true;
-            window.electronAPI.openExternal(data.verificationUri);
+            window.desktopAPI.openExternal(data.verificationUri);
           }
         }, 3000);
       }
     });
 
     // Auth successful
-    const cleanupSuccess = window.electronAPI.onGithubAuthSuccess((data) => {
+    const cleanupSuccess = window.desktopAPI.onGithubAuthSuccess((data) => {
       setSuccess(true);
       setUser(data.user);
 
@@ -95,7 +95,7 @@ export function GithubDeviceFlowModal({
     });
 
     // Auth error
-    const cleanupError = window.electronAPI.onGithubAuthError((data) => {
+    const cleanupError = window.desktopAPI.onGithubAuthError((data) => {
       setError(data.message || data.error);
 
       if (onError) {
@@ -192,13 +192,13 @@ export function GithubDeviceFlowModal({
 
   const openGitHub = () => {
     if (verificationUri) {
-      window.electronAPI.openExternal(verificationUri);
+      window.desktopAPI.openExternal(verificationUri);
     }
   };
 
   const handleClose = () => {
     // Cancel auth flow in main process (polling continues in background)
-    window.electronAPI.githubCancelAuth();
+    window.desktopAPI.githubCancelAuth();
     onClose();
   };
 

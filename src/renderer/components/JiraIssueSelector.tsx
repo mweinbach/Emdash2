@@ -34,7 +34,7 @@ const JiraIssueSelector: React.FC<Props> = ({
   const isMountedRef = useRef(true);
   const [visibleCount, setVisibleCount] = useState(10);
 
-  const canList = typeof window !== 'undefined' && !!window.electronAPI?.jiraInitialFetch;
+  const canList = typeof window !== 'undefined' && !!window.desktopAPI?.jiraInitialFetch;
   const issuesLoaded = availableIssues.length > 0;
   const [isConnected, setIsConnected] = useState<boolean | null>(null);
   // Only disable when explicitly disabled, or when not connected and we can't load
@@ -63,7 +63,7 @@ const JiraIssueSelector: React.FC<Props> = ({
     let cancel = false;
     (async () => {
       try {
-        const api: any = (window as any).electronAPI;
+        const api: any = (window as any).desktopAPI;
         const res = await api?.jiraCheckConnection?.();
         if (!cancel) setIsConnected(!!res?.connected);
       } catch {
@@ -77,7 +77,7 @@ const JiraIssueSelector: React.FC<Props> = ({
 
   const loadIssues = useCallback(async () => {
     if (!canList) return;
-    const api = window.electronAPI;
+    const api = window.desktopAPI;
     if (!api?.jiraInitialFetch) {
       setAvailableIssues([]);
       setIssueListError('Jira issue list unavailable in this build.');
@@ -113,7 +113,7 @@ const JiraIssueSelector: React.FC<Props> = ({
       setIsSearching(false);
       return;
     }
-    const api = window.electronAPI;
+    const api = window.desktopAPI;
     if (!api?.jiraSearchIssues) return;
     setIsSearching(true);
     try {

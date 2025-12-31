@@ -25,10 +25,10 @@ const renderProviderRow = (provider: CliProviderStatus) => {
   const logo = providerAssets[provider.id as keyof typeof providerAssets]?.logo;
 
   const handleNameClick =
-    provider.docUrl && window?.electronAPI?.openExternal
+    provider.docUrl && window?.desktopAPI?.openExternal
       ? async () => {
           try {
-            await window.electronAPI.openExternal(provider.docUrl!);
+            await window.desktopAPI.openExternal(provider.docUrl!);
           } catch (openError) {
             console.error(`Failed to open ${provider.name} docs:`, openError);
           }

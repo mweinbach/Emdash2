@@ -66,7 +66,7 @@ export const ProviderBar: React.FC<Props> = ({
     let cancelled = false;
     (async () => {
       try {
-        const res = await (window as any).electronAPI?.getSettings?.();
+        const res = await (window as any).desktopAPI?.getSettings?.();
         if (!cancelled && res?.success) {
           setC7Enabled(Boolean(res.settings?.mcp?.context7?.enabled));
         }
@@ -103,7 +103,7 @@ export const ProviderBar: React.FC<Props> = ({
         if (!isTerminal) return;
         const phrase = getContext7InvocationForProvider(provider) || 'use context7';
         const ptyId = `${provider}-main-${taskId}`;
-        (window as any).electronAPI?.ptyInput?.({ id: ptyId, data: `${phrase}\n` });
+        (window as any).desktopAPI?.ptyInput?.({ id: ptyId, data: `${phrase}\n` });
       } else {
         try {
           localStorage.removeItem(`c7:ws:${taskId}`);
@@ -187,7 +187,7 @@ export const ProviderBar: React.FC<Props> = ({
                         onClick={() => {
                           try {
                             if (linearIssue.url)
-                              (window as any).electronAPI?.openExternal?.(linearIssue.url);
+                              (window as any).desktopAPI?.openExternal?.(linearIssue.url);
                           } catch {}
                         }}
                       >
@@ -246,7 +246,7 @@ export const ProviderBar: React.FC<Props> = ({
                                 onClick={(e) => {
                                   e.preventDefault();
                                   try {
-                                    (window as any).electronAPI?.openExternal?.(linearIssue.url!);
+                                    (window as any).desktopAPI?.openExternal?.(linearIssue.url!);
                                   } catch {}
                                 }}
                               >
@@ -272,7 +272,7 @@ export const ProviderBar: React.FC<Props> = ({
                         onClick={() => {
                           try {
                             if (githubIssue.url)
-                              (window as any).electronAPI?.openExternal?.(githubIssue.url);
+                              (window as any).desktopAPI?.openExternal?.(githubIssue.url);
                           } catch {}
                         }}
                       >
@@ -299,7 +299,7 @@ export const ProviderBar: React.FC<Props> = ({
                                 onClick={(e) => {
                                   e.preventDefault();
                                   try {
-                                    (window as any).electronAPI?.openExternal?.(githubIssue.url!);
+                                    (window as any).desktopAPI?.openExternal?.(githubIssue.url!);
                                   } catch {}
                                 }}
                               >
@@ -325,7 +325,7 @@ export const ProviderBar: React.FC<Props> = ({
                         onClick={() => {
                           try {
                             if (jiraIssue.url)
-                              (window as any).electronAPI?.openExternal?.(jiraIssue.url);
+                              (window as any).desktopAPI?.openExternal?.(jiraIssue.url);
                           } catch {}
                         }}
                       >

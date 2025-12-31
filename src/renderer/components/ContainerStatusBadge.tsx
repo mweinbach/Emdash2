@@ -32,7 +32,7 @@ export const ContainerStatusBadge: React.FC<Props> = ({
     (async () => {
       try {
         if (!taskPath) return;
-        const api: any = (window as any).electronAPI;
+        const api: any = (window as any).desktopAPI;
         const candidates = [
           'docker-compose.yml',
           'docker-compose.yaml',

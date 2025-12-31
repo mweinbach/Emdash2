@@ -105,7 +105,7 @@ bun run build        # Builds installers/bundles via Tauri
 - **Core → Renderer**: Emit Tauri events (e.g. `app.emit('event-name', data)`)
 - **Renderer → Core**: Use `invoke('command_name', args)` from `@tauri-apps/api`
 - **Event listeners**: Always clean up in `useEffect` return
-- **Type safety**: Define IPC types in `src/renderer/types/electron-api.d.ts`
+- **Type safety**: Define IPC types in `src/renderer/types/desktop-api.d.ts`
 
 ### Error Handling
 
@@ -198,7 +198,7 @@ fn example_action(id: String) -> Value {
 
 ```typescript
 // Renderer (src/renderer/components/Example.tsx)
-const result = await window.electronAPI.exampleAction({ id: '123' });
+const result = await window.desktopAPI.exampleAction({ id: '123' });
 if (result.success) {
   // Handle success
 } else {
@@ -236,7 +236,7 @@ export function useExample(id: string) {
 1. **PTY Resize Errors**: PTYs must be cleaned up on exit. Use `removePty()` in exit handlers.
 2. **Worktree Path Resolution**: Always resolve worktree paths from `WorktreeService` when creating agents.
 3. **React Hooks Rules**: Never call hooks conditionally or after early returns.
-4. **IPC Type Safety**: Always define types in `electron-api.d.ts` for bridge methods.
+4. **IPC Type Safety**: Always define types in `desktop-api.d.ts` for bridge methods.
 6. **Database Migrations**: Never manually edit migration files; use Drizzle Kit.
 6. **Context Sections**: When working with diffs, ensure context sections are properly collapsed/expanded.
 

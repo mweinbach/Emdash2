@@ -28,7 +28,7 @@ const waitForRuntimeReady = (timeoutMs = 1500) =>
     }
     const start = Date.now();
     const tick = () => {
-      const api: any = (window as any).electronAPI;
+      const api: any = (window as any).desktopAPI;
       const runtime = api?.__runtime;
       if (runtime === 'web' || api?.__runtimeReady) {
         resolve();
@@ -71,7 +71,7 @@ export function useGithubAuth() {
 
   const checkStatus = useCallback(async () => {
     try {
-      const api: any = (window as any).electronAPI;
+      const api: any = (window as any).desktopAPI;
       if (api?.__runtime === 'tauri' && !api?.__runtimeReady) {
         await waitForRuntimeReady();
       }
@@ -96,7 +96,7 @@ export function useGithubAuth() {
   const login = useCallback(async () => {
     setIsLoading(true);
     try {
-      const result = await window.electronAPI.githubAuth();
+      const result = await window.desktopAPI.githubAuth();
       // Device Flow returns device code info, not immediate success
       // The modal will handle the actual authentication
       return result;
@@ -107,7 +107,7 @@ export function useGithubAuth() {
 
   const logout = useCallback(async () => {
     try {
-      await window.electronAPI.githubLogout();
+      await window.desktopAPI.githubLogout();
     } finally {
       syncCache({
         installed: cachedGithubStatus?.installed ?? true,

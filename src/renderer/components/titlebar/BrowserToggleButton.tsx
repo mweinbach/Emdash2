@@ -22,18 +22,18 @@ interface Props {
 
 const BrowserToggleButton: React.FC<Props> = ({ taskId, taskPath, parentProjectPath }) => {
   const browser = useBrowser();
-  const isTauriRuntime = (window as any)?.electronAPI?.__runtime === 'tauri';
+  const isTauriRuntime = (window as any)?.desktopAPI?.__runtime === 'tauri';
 
   const openExternal = React.useCallback((url: string) => {
     try {
-      (window as any).electronAPI?.openExternal?.(url);
+      (window as any).desktopAPI?.openExternal?.(url);
     } catch {}
   }, []);
   async function needsInstall(path?: string | null): Promise<boolean> {
     const p = (path || '').trim();
     if (!p) return false;
     try {
-      const res = await (window as any).electronAPI?.fsList?.(p, {
+      const res = await (window as any).desktopAPI?.fsList?.(p, {
         includeDirs: true,
         maxEntries: 2000,
       });
@@ -42,7 +42,7 @@ const BrowserToggleButton: React.FC<Props> = ({ taskId, taskPath, parentProjectP
         (x: any) => x?.path === 'node_modules' && x?.type === 'dir'
       );
       if (hasNodeModules) return false;
-      const pkg = await (window as any).electronAPI?.fsRead?.(p, 'package.json', 1024 * 64);
+      const pkg = await (window as any).desktopAPI?.fsRead?.(p, 'package.json', 1024 * 64);
       return !!pkg?.success;
     } catch {
       return false;
@@ -51,7 +51,7 @@ const BrowserToggleButton: React.FC<Props> = ({ taskId, taskPath, parentProjectP
 
   // Auto-open when host preview emits a URL for this task
   useEffect(() => {
-    const off = (window as any).electronAPI?.onHostPreviewEvent?.((data: any) => {
+    const off = (window as any).desktopAPI?.onHostPreviewEvent?.((data: any) => {
       try {
         if (data?.type === 'url' && data?.taskId && data?.url) {
           if (taskId && data.taskId !== taskId) return;
@@ -132,7 +132,7 @@ const BrowserToggleButton: React.FC<Props> = ({ taskId, taskPath, parentProjectP
         const installed = isInstalled(id);
         // If install needed, run setup first (only when sentinel not present)
         if (!installed && (await needsInstall(wp))) {
-          await (window as any).electronAPI?.hostPreviewSetup?.({
+          await (window as any).desktopAPI?.hostPreviewSetup?.({
             taskId: id,
             taskPath: wp,
           });
@@ -140,7 +140,7 @@ const BrowserToggleButton: React.FC<Props> = ({ taskId, taskPath, parentProjectP
         }
         const running = isRunning(id);
         if (!running) {
-          await (window as any).electronAPI?.hostPreviewStart?.({
+          await (window as any).desktopAPI?.hostPreviewStart?.({
             taskId: id,
             taskPath: wp,
             parentProjectPath: (parentProjectPath || '').trim(),

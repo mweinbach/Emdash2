@@ -42,7 +42,7 @@ const OpenInMenu: React.FC<OpenInMenuProps> = ({ path, align = 'right' }) => {
       captureTelemetry('toolbar_open_in_selected', { app });
     });
     try {
-      const res = await (window as any).electronAPI?.openIn?.({ app, path });
+      const res = await (window as any).desktopAPI?.openIn?.({ app, path });
       if (!res?.success) {
         const pretty =
           app === 'ghostty'

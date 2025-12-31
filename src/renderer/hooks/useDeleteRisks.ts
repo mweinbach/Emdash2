@@ -36,8 +36,8 @@ export function useDeleteRisks(tasks: TaskRef[], enabled: boolean) {
       for (const ws of tasks) {
         try {
           const [statusRes, infoRes, rawPr] = await Promise.allSettled([
-            (window as any).electronAPI?.getGitStatus?.(ws.path),
-            (window as any).electronAPI?.getGitInfo?.(ws.path),
+            (window as any).desktopAPI?.getGitStatus?.(ws.path),
+            (window as any).desktopAPI?.getGitInfo?.(ws.path),
             refreshPrStatus(ws.path),
           ]);
 

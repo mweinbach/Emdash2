@@ -58,7 +58,7 @@ const IntegrationsCard: React.FC = () => {
   }, []);
 
   const loadLinearStatus = useCallback(async () => {
-    if (!window?.electronAPI?.linearCheckConnection) {
+    if (!window?.desktopAPI?.linearCheckConnection) {
       updateLinearState((prev) => ({
         ...prev,
         checking: false,
@@ -70,7 +70,7 @@ const IntegrationsCard: React.FC = () => {
     }
 
     try {
-      const status = await window.electronAPI.linearCheckConnection();
+      const status = await window.desktopAPI.linearCheckConnection();
       updateLinearState((prev) => ({
         ...prev,
         checking: false,
@@ -100,7 +100,7 @@ const IntegrationsCard: React.FC = () => {
     let cancel = false;
     (async () => {
       try {
-        const api: any = (window as any).electronAPI;
+        const api: any = (window as any).desktopAPI;
         if (!api?.jiraCheckConnection) {
           setJiraStatus('error');
           // setJiraError('Jira integration unavailable.');
@@ -135,14 +135,14 @@ const IntegrationsCard: React.FC = () => {
 
   const handleLinearConnect = useCallback(async () => {
     const token = linearState.input.trim();
-    if (!token || !window?.electronAPI?.linearSaveToken) {
+    if (!token || !window?.desktopAPI?.linearSaveToken) {
       return;
     }
 
     updateLinearState((prev) => ({ ...prev, loading: true, error: null }));
 
     try {
-      const result = await window.electronAPI.linearSaveToken(token);
+      const result = await window.desktopAPI.linearSaveToken(token);
       if (result?.success) {
         updateLinearState(() => ({
           checking: false,
@@ -186,13 +186,13 @@ const IntegrationsCard: React.FC = () => {
   );
 
   const handleLinearDisconnect = useCallback(async () => {
-    if (!window?.electronAPI?.linearClearToken) {
+    if (!window?.desktopAPI?.linearClearToken) {
       return;
     }
 
     updateLinearState((prev) => ({ ...prev, loading: true, error: null }));
     try {
-      const result = await window.electronAPI.linearClearToken();
+      const result = await window.desktopAPI.linearClearToken();
       if (result?.success) {
         updateLinearState(() => ({
           checking: false,
@@ -243,7 +243,7 @@ const IntegrationsCard: React.FC = () => {
     setGithubError(null);
     try {
       // Auto-install gh CLI
-      const installResult = await window.electronAPI.githubInstallCLI();
+      const installResult = await window.desktopAPI.githubInstallCLI();
 
       if (!installResult.success) {
         setGithubError(`Could not auto-install gh CLI: ${installResult.error || 'Unknown error'}`);
@@ -503,7 +503,7 @@ const IntegrationsCard: React.FC = () => {
                       onSubmit={async () => {
                         try {
                           setJiraError(null);
-                          const api: any = (window as any).electronAPI;
+                          const api: any = (window as any).desktopAPI;
                           const res = await api?.jiraSaveCredentials?.({
                             siteUrl: jiraSite.trim(),
                             email: jiraEmail.trim(),
@@ -537,7 +537,7 @@ const IntegrationsCard: React.FC = () => {
           jiraStatus === 'connected'
             ? async () => {
                 try {
-                  const api: any = (window as any).electronAPI;
+                  const api: any = (window as any).desktopAPI;
                   const res = await api?.jiraClearCredentials?.();
                   if (res?.success) {
                     setJiraStatus('disconnected');

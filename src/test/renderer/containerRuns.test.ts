@@ -13,7 +13,7 @@ const { startRunMock, onRunEventMock, removeRunListenersMock, triggerEvent, wind
     });
     const removeRunListenersMock = vi.fn();
     const windowMock = {
-      electronAPI: {
+      desktopAPI: {
         startContainerRun: startRunMock,
         onRunEvent: onRunEventMock,
         removeRunEventListeners: removeRunListenersMock,

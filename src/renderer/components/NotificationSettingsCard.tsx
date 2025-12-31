@@ -9,7 +9,7 @@ const NotificationSettingsCard: React.FC = () => {
   useEffect(() => {
     (async () => {
       try {
-        const result = await window.electronAPI.getSettings();
+        const result = await window.desktopAPI.getSettings();
         if (result.success && result.settings) {
           const en = Boolean(result.settings.notifications?.enabled ?? true);
           const snd = Boolean(result.settings.notifications?.sound ?? true);
@@ -29,7 +29,7 @@ const NotificationSettingsCard: React.FC = () => {
       captureTelemetry('notification_settings_changed', { enabled: next, sound });
     });
     try {
-      await window.electronAPI.updateSettings({
+      await window.desktopAPI.updateSettings({
         notifications: { enabled: next, sound },
       });
     } catch (error) {
@@ -43,7 +43,7 @@ const NotificationSettingsCard: React.FC = () => {
       captureTelemetry('notification_settings_changed', { enabled, sound: next });
     });
     try {
-      await window.electronAPI.updateSettings({
+      await window.desktopAPI.updateSettings({
         notifications: { enabled, sound: next },
       });
     } catch (error) {

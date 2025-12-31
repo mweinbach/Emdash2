@@ -38,7 +38,7 @@ export const GitHubIssueSelector: React.FC<GitHubIssueSelectorProps> = ({
   const [visibleCount, setVisibleCount] = useState(10);
   const isMountedRef = useRef(true);
 
-  const api = (typeof window !== 'undefined' ? (window as any).electronAPI : null) as any;
+  const api = (typeof window !== 'undefined' ? (window as any).desktopAPI : null) as any;
   const canListGithub = !!api?.githubIssuesList && !!projectPath;
   const issuesLoaded = availableIssues.length > 0;
   const noIssuesAvailable =

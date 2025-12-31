@@ -37,7 +37,7 @@ export function useCreatePR() {
     setIsCreating(true);
     try {
       // Guard: ensure desktop bridge methods exist (prevents hard crashes in plain web builds)
-      const api: any = (window as any).electronAPI;
+      const api: any = (window as any).desktopAPI;
       if (!api?.gitCommitAndPush || !api?.createPullRequest) {
         const msg = 'PR creation is only available in the desktop app. Start via "bun run d".';
         toast({ title: 'Create PR Unavailable', description: msg, variant: 'destructive' });
@@ -120,8 +120,8 @@ export function useCreatePR() {
                   const { captureTelemetry } = await import('../lib/telemetryClient');
                   captureTelemetry('pr_viewed');
                 })();
-                if (prUrl && window.electronAPI?.openExternal) {
-                  window.electronAPI.openExternal(prUrl);
+                if (prUrl && window.desktopAPI?.openExternal) {
+                  window.desktopAPI.openExternal(prUrl);
                 }
               }}
             >

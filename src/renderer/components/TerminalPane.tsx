@@ -147,7 +147,7 @@ const TerminalPaneComponent: React.FC<Props> = ({
       }
       if (paths.length === 0) return;
       const escaped = paths.map((p) => `'${p.replace(/'/g, "'\\''")}'`).join(' ');
-      window.electronAPI.ptyInput({ id, data: `${escaped} ` });
+      window.desktopAPI.ptyInput({ id, data: `${escaped} ` });
       sessionRef.current?.focus();
     } catch (error) {
       log.warn('Terminal drop failed', { error });

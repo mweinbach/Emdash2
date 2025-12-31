@@ -68,7 +68,7 @@ export const ProviderTooltip: React.FC<ProviderTooltipProps> = ({
       if (!open) return;
       if (!taskPath) return;
       try {
-        const res = await (window as any).electronAPI?.getGitStatus?.(taskPath);
+        const res = await (window as any).desktopAPI?.getGitStatus?.(taskPath);
         if (!res?.success || !Array.isArray(res?.changes)) {
           if (!cancelled) setDiffSummary(null);
           return;

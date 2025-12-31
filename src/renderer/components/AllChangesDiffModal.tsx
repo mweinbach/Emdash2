@@ -80,7 +80,7 @@ export const AllChangesDiffModal: React.FC<AllChangesDiffModalProps> = ({
     if (!current || current.loading || current.error) return;
     updateFileData(filePath, (data) => ({ ...data, saving: true, saveError: null }));
     try {
-      const res = await window.electronAPI.fsWriteFile(taskPath, filePath, current.modified, true);
+      const res = await window.desktopAPI.fsWriteFile(taskPath, filePath, current.modified, true);
       if (!res?.success) {
         throw new Error(res?.error || 'Failed to save file');
       }
@@ -151,7 +151,7 @@ export const AllChangesDiffModal: React.FC<AllChangesDiffModalProps> = ({
 
       try {
         // Get diff lines
-        const diffRes = await window.electronAPI.getFileDiff({ taskPath, filePath });
+        const diffRes = await window.desktopAPI.getFileDiff({ taskPath, filePath });
         if (!diffRes?.success || !diffRes.diff) {
           throw new Error(diffRes?.error || 'Failed to load diff');
         }
@@ -173,7 +173,7 @@ export const AllChangesDiffModal: React.FC<AllChangesDiffModalProps> = ({
           modifiedContent = '';
         } else if (file.status === 'added') {
           // Read current file content
-          const readRes = await window.electronAPI.fsRead(taskPath, filePath, 2 * 1024 * 1024);
+          const readRes = await window.desktopAPI.fsRead(taskPath, filePath, 2 * 1024 * 1024);
           if (readRes?.success && readRes.content) {
             modifiedContent = readRes.content;
             originalContent = '';
@@ -191,7 +191,7 @@ export const AllChangesDiffModal: React.FC<AllChangesDiffModalProps> = ({
 
           // Try to read actual current content for better accuracy
           try {
-            const readRes = await window.electronAPI.fsRead(taskPath, filePath, 2 * 1024 * 1024);
+            const readRes = await window.desktopAPI.fsRead(taskPath, filePath, 2 * 1024 * 1024);
             if (readRes?.success && readRes.content) {
               modifiedContent = readRes.content;
             }

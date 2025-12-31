@@ -26,7 +26,7 @@ export function usePullRequests(projectPath?: string, enabled: boolean = true) {
     setLoading(true);
     setError(null);
     try {
-      const response = await window.electronAPI.githubListPullRequests(projectPath);
+      const response = await window.desktopAPI.githubListPullRequests(projectPath);
       if (response?.success) {
         const items = Array.isArray(response.prs) ? response.prs : [];
         const mapped = items

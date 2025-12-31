@@ -105,7 +105,7 @@ const notify = (taskPath: string, status: GitStatusResult | null) => {
 
 const fetchGitStatus = async (taskPath: string): Promise<GitStatusResult | null> => {
   try {
-    const api: any = (window as any).electronAPI;
+    const api: any = (window as any).desktopAPI;
     if (!api?.getGitStatus) {
       return { success: false, error: 'Git status unavailable' };
     }

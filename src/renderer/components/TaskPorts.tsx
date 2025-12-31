@@ -24,7 +24,7 @@ const TaskPorts: React.FC<Props> = ({ taskId, taskPath, ports, previewUrl, previ
     let cancelled = false;
     (async () => {
       try {
-        const api: any = (window as any).electronAPI;
+        const api: any = (window as any).desktopAPI;
         const candidates = [
           'docker-compose.yml',
           'docker-compose.yaml',
@@ -67,7 +67,7 @@ const TaskPorts: React.FC<Props> = ({ taskId, taskPath, ports, previewUrl, previ
       let cancelled = false;
       (async () => {
         try {
-          const api: any = (window as any).electronAPI;
+          const api: any = (window as any).desktopAPI;
           if (!api?.resolveServiceIcon) return;
           const res = await api.resolveServiceIcon({
             service: name,
@@ -132,7 +132,7 @@ const TaskPorts: React.FC<Props> = ({ taskId, taskPath, ports, previewUrl, previ
                 className="inline-flex items-center rounded border border-primary/60 px-2 py-1 text-xs font-medium text-primary hover:bg-primary/10"
                 onClick={(e) => {
                   e.stopPropagation();
-                  window.electronAPI.openExternal(previewUrl);
+                  window.desktopAPI.openExternal(previewUrl);
                 }}
               >
                 Open Preview
@@ -181,7 +181,7 @@ const TaskPorts: React.FC<Props> = ({ taskId, taskPath, ports, previewUrl, previ
                   className="ml-1 inline-flex items-center gap-1 rounded border border-border/70 px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-muted/40"
                   onClick={(e) => {
                     e.stopPropagation();
-                    window.electronAPI.openExternal(url);
+                    window.desktopAPI.openExternal(url);
                   }}
                   title="Open in browser"
                 >
@@ -225,7 +225,7 @@ const TaskPorts: React.FC<Props> = ({ taskId, taskPath, ports, previewUrl, previ
                 onClick={async (e) => {
                   e.stopPropagation();
                   try {
-                    const api: any = (window as any).electronAPI;
+                    const api: any = (window as any).desktopAPI;
                     const hasBunLock =
                       (await api.fsRead(taskPath || '', 'bun.lockb', 1))?.success ||
                       (await api.fsRead(taskPath || '', 'bun.lock', 1))?.success;

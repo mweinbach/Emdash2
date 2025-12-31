@@ -84,7 +84,7 @@ const KanbanBoard: React.FC<{
     // Per-task: when the PTY exits and task is not busy anymore, move to Done
     for (const ws of wsList) {
       try {
-        const offExit = (window as any).electronAPI.onPtyExit?.(
+        const offExit = (window as any).desktopAPI.onPtyExit?.(
           ws.id,
           (_info: { exitCode: number; signal?: number }) => {
             let currentlyBusy = false;
@@ -231,7 +231,7 @@ const KanbanBoard: React.FC<{
         try {
           let ahead = 0;
           for (const p of paths) {
-            const res = await (window as any).electronAPI?.getBranchStatus?.({ taskPath: p });
+            const res = await (window as any).desktopAPI?.getBranchStatus?.({ taskPath: p });
             if (res?.success) {
               const a = Number(res?.ahead ?? 0);
               if (a > 0) {

@@ -18,7 +18,7 @@ use zip::CompressionMethod;
 
 const CURRENT_DB_FILENAME: &str = "emdash.db";
 const LEGACY_DB_FILENAMES: &[&str] = &["database.sqlite", "orcbench.db"];
-const LEGACY_DIRS: &[&str] = &["Electron", "emdash", "Emdash"];
+const LEGACY_DIRS: &[&str] = &["emdash", "Emdash"];
 static EMBEDDED_MIGRATIONS: Dir = include_dir!("$CARGO_MANIFEST_DIR/../drizzle");
 
 pub struct DbState {
