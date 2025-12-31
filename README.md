@@ -1,26 +1,6 @@
 <img width="4856" height="1000" alt="Github_banner (1)" src="https://github.com/user-attachments/assets/9dfdd1fd-ea4f-4b86-9daf-d4a46952594a" />
 
 <div align="center" style="margin:24px 0;">
-  
-<br />
-
-[![MIT License](https://img.shields.io/badge/License-MIT-555555.svg?labelColor=333333&color=666666)](LICENSE)
-[![Downloads](https://img.shields.io/github/downloads/generalaction/emdash/total?labelColor=333333&color=666666)](https://github.com/generalaction/emdash/releases)
-[![GitHub Stars](https://img.shields.io/github/stars/generalaction/emdash?labelColor=333333&color=666666)](https://github.com/generalaction/emdash)
-[![Last Commit](https://img.shields.io/github/last-commit/generalaction/emdash?labelColor=333333&color=666666)](https://github.com/generalaction/emdash/commits/main)
-[![Commit Activity](https://img.shields.io/github/commit-activity/m/generalaction/emdash?labelColor=333333&color=666666)](https://github.com/generalaction/emdash/graphs/commit-activity)
-<br>
-[![Discord](https://img.shields.io/badge/Discord-join-%235462eb?labelColor=%235462eb&logo=discord&logoColor=%23f5f5f5)](https://discord.gg/f2fv7YxuR2)
-<a href="https://www.ycombinator.com"><img src="https://img.shields.io/badge/Y%20Combinator-W26-orange" alt="Y Combinator W26"></a>
-[![Follow @emdashsh on X](https://img.shields.io/twitter/follow/emdashsh?logo=X&color=%23f5f5f5)](https://twitter.com/intent/follow?screen_name=emdashsh)
-
-<br />
-
-  <a href="https://github.com/generalaction/emdash/releases" style="display:inline-block; margin-right:24px; text-decoration:none; outline:none; border:none;">
-    <img src="./docs/public/media/downloadformacos.png" alt="Download app for macOS" height="40">
-  </a>
-
-</div>
 
 <br />
 
@@ -39,29 +19,6 @@ Emdash2 lets you develop and test multiple features with multiple agents in para
 
 [Installation](#installation) • [Integrations](#integrations) • [Demo](#demo) • [Contributing](#contributing) • [FAQ](#faq)
 
-</div>
-
-# Installation
-
-**[Latest Release (macOS • Windows • Linux)](https://github.com/generalaction/emdash/releases/latest)**
-
-<details><summary>Direct links</summary>
-
-### macOS
-- Apple Silicon: https://github.com/generalaction/emdash/releases/latest/download/emdash-arm64.dmg  
-- Intel x64: https://github.com/generalaction/emdash/releases/latest/download/emdash-x64.dmg
-
-[![Homebrew](https://img.shields.io/badge/-Homebrew-000000?style=for-the-badge&logo=homebrew&logoColor=FBB040)](https://formulae.brew.sh/cask/emdash)
-> macOS users can also: `brew install --cask emdash`
-
-### Windows
-- Installer (x64): https://github.com/generalaction/emdash/releases/latest/download/emdash-x64-installer.exe  
-- Portable (x64): https://github.com/generalaction/emdash/releases/latest/download/emdash-x64.exe
-
-### Linux
-- AppImage (x64): https://github.com/generalaction/emdash/releases/latest/download/emdash-x64.AppImage  
-- Debian package (x64): https://github.com/generalaction/emdash/releases/latest/download/emdash-x64.deb
-</details>
 
 # Providers
 
