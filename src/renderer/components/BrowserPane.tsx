@@ -48,18 +48,7 @@ const BrowserPane: React.FC<{
     widthPctRef.current = widthPct;
   }, [widthPct]);
   const [failed, setFailed] = React.useState<boolean>(false);
-  const [overlayRaised, setOverlayRaised] = React.useState<boolean>(false);
-
-  // Listen for global overlay events (e.g., feedback modal) and hide preview when active
-  React.useEffect(() => {
-    const onOverlay = (e: any) => {
-      try {
-        setOverlayRaised(Boolean(e?.detail?.open));
-      } catch {}
-    };
-    window.addEventListener('emdash:overlay:changed', onOverlay as any);
-    return () => window.removeEventListener('emdash:overlay:changed', onOverlay as any);
-  }, []);
+  const overlayRaised = false;
 
   React.useEffect(() => {
     if (typeof url === 'string') setAddress(url);

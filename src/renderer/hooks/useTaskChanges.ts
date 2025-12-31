@@ -30,19 +30,24 @@ export function useTaskChanges(taskPath: string, taskId: string) {
 
   useEffect(() => {
     if (!taskPath) {
-      setChanges({
-        taskId,
-        changes: [],
-        totalAdditions: 0,
-        totalDeletions: 0,
-        isLoading: false,
-        error: 'Missing task path',
-      });
+      setTimeout(() => {
+        setChanges({
+          taskId,
+          changes: [],
+          totalAdditions: 0,
+          totalDeletions: 0,
+          isLoading: false,
+          error: 'Missing task path',
+        });
+      }, 0);
       return;
     }
 
     let cancelled = false;
-    setChanges((prev) => ({ ...prev, taskId, isLoading: true, error: undefined }));
+    setTimeout(() => {
+      if (cancelled) return;
+      setChanges((prev) => ({ ...prev, taskId, isLoading: true, error: undefined }));
+    }, 0);
 
     const handleStatus = (result: GitStatusResult | null) => {
       if (cancelled) return;

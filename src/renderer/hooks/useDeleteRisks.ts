@@ -24,9 +24,11 @@ export function useDeleteRisks(tasks: TaskRef[], enabled: boolean) {
 
   useEffect(() => {
     if (!enabled || tasks.length === 0) {
-      setRisks({});
-      setLoading(false);
-      setLoaded(false);
+      setTimeout(() => {
+        setRisks({});
+        setLoading(false);
+        setLoaded(false);
+      }, 0);
       return;
     }
     let cancelled = false;

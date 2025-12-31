@@ -19,15 +19,20 @@ export function useFileChanges(taskPath: string) {
 
   useEffect(() => {
     if (!taskPath) {
-      setFileChanges([]);
-      setIsLoading(false);
-      setError('Missing task path');
+      setTimeout(() => {
+        setFileChanges([]);
+        setIsLoading(false);
+        setError('Missing task path');
+      }, 0);
       return;
     }
 
     let cancelled = false;
-    setIsLoading(true);
-    setError(null);
+    setTimeout(() => {
+      if (cancelled) return;
+      setIsLoading(true);
+      setError(null);
+    }, 0);
 
     const handleStatus = (result: GitStatusResult | null) => {
       if (cancelled) return;

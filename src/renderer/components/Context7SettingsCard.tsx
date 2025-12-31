@@ -2,13 +2,11 @@ import React from 'react';
 import { Button } from './ui/button';
 import { Switch } from './ui/switch';
 import { CONTEXT7_INTEGRATION } from '../mcp/context7';
-import FeedbackModal from './FeedbackModal';
 import context7Logo from '../../assets/images/context7.png';
 
 const Context7SettingsCard: React.FC = () => {
   const [enabled, setEnabled] = React.useState<boolean>(false);
   const [busy, setBusy] = React.useState<boolean>(false);
-  const [showMcpFeedback, setShowMcpFeedback] = React.useState(false);
 
   const refresh = React.useCallback(async () => {
     try {
@@ -83,24 +81,7 @@ const Context7SettingsCard: React.FC = () => {
         >
           Docs ↗
         </Button>
-        <Button
-          type="button"
-          variant="link"
-          size="sm"
-          className="h-auto p-0 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-          onClick={() => setShowMcpFeedback(true)}
-        >
-          Suggest an MCP ↗
-        </Button>
       </div>
-
-      {showMcpFeedback ? (
-        <FeedbackModal
-          isOpen={showMcpFeedback}
-          onClose={() => setShowMcpFeedback(false)}
-          blurb="Which MCP would you like Emdash2 to support next? Include the MCP name, link, and why it helps your workflow."
-        />
-      ) : null}
     </div>
   );
 };

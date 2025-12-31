@@ -14,7 +14,7 @@ export const StreamingAction: React.FC<{
     if (display === text) return;
     const el = ref.current;
     if (!el) {
-      setDisplay(text);
+      setTimeout(() => setDisplay(text), 0);
       return;
     }
 

@@ -68,7 +68,7 @@ const BaseBranchControls: React.FC<BaseBranchControlsProps> = ({
     if (open) {
       requestAnimationFrame(() => searchInputRef.current?.focus());
     } else {
-      setSearchTerm('');
+      setTimeout(() => setSearchTerm(''), 0);
     }
   }, [open]);
   const handleOpenChange = useCallback(

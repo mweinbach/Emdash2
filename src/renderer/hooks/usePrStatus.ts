@@ -13,11 +13,11 @@ export function usePrStatus(taskPath?: string) {
 
   useEffect(() => {
     if (!taskPath) {
-      setPr(null);
+      setTimeout(() => setPr(null), 0);
       return;
     }
 
-    setPr(null); // Clear stale data before subscribing to new task
+    setTimeout(() => setPr(null), 0); // Clear stale data before subscribing to new task
     return subscribeToPrStatus(taskPath, setPr);
   }, [taskPath]);
 

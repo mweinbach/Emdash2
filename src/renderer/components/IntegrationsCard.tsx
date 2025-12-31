@@ -92,7 +92,9 @@ const IntegrationsCard: React.FC = () => {
 
   useEffect(() => {
     if (cachedLinearState) return;
-    loadLinearStatus();
+    setTimeout(() => {
+      loadLinearStatus();
+    }, 0);
   }, [loadLinearStatus]);
 
   // Jira connection load

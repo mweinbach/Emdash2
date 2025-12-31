@@ -5,7 +5,7 @@ export function useTaskBusy(taskId?: string) {
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     if (!taskId) {
-      setBusy(false);
+      setTimeout(() => setBusy(false), 0);
       return;
     }
     return activityStore.subscribe(taskId, setBusy);

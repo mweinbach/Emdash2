@@ -58,14 +58,16 @@ export function usePtyBusy(ptyId?: string, provider?: string) {
 
   useEffect(() => {
     if (!ptyId) {
-      setBusy(false);
-      busyRef.current = false;
+      setTimeout(() => {
+        setBusy(false);
+        busyRef.current = false;
+      }, 0);
       return;
     }
 
     const api: any = (window as any).desktopAPI;
     if (!api?.onPtyData) {
-      setBusy(false);
+      setTimeout(() => setBusy(false), 0);
       return;
     }
 

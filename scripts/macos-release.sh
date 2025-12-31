@@ -21,7 +21,7 @@ APPLE_TEAM_ID="${APPLE_TEAM_ID:-}"
 APPLE_APP_SPECIFIC_PASSWORD="${APPLE_APP_SPECIFIC_PASSWORD:-${APPLE_PASSWORD:-}}"
 NOTARIZE_PROFILE="${NOTARIZE_PROFILE:-${APPLE_NOTARY_KEYCHAIN_PROFILE:-}}"
 
-if [[ -z "$MACOS_SIGNING_IDENTITY" ]]; then
+if [[ -z "${MACOS_SIGNING_IDENTITY-}" ]]; then
   echo "Missing env: MACOS_SIGNING_IDENTITY (recommended: Developer ID Application for distribution; Apple Development works for local testing but may still be blocked on other machines)" >&2
   exit 1
 fi
