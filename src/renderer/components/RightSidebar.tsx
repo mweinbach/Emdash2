@@ -101,6 +101,9 @@ const RightSidebar: React.FC<RightSidebarProps> = ({ task, projectPath, classNam
                     >
                       <FileChangesPanel
                         taskId={v.path}
+                        projectPath={projectPath || task?.path}
+                        worktreeId={v.worktreeId}
+                        worktreeBranch={v.branch}
                         title={getVariantDisplayLabel(v)}
                         subtitle={v.branch || v.name}
                         logoSrc={asset?.logo}
@@ -134,6 +137,9 @@ const RightSidebar: React.FC<RightSidebarProps> = ({ task, projectPath, classNam
                   <>
                     <FileChangesPanel
                       taskId={v.path}
+                      projectPath={projectPath || task?.path}
+                      worktreeId={v.worktreeId}
+                      worktreeBranch={v.branch}
                       title={getVariantDisplayLabel(v)}
                       subtitle={v.branch || v.name}
                       logoSrc={asset?.logo}
@@ -157,6 +163,9 @@ const RightSidebar: React.FC<RightSidebarProps> = ({ task, projectPath, classNam
               <>
                 <FileChangesPanel
                   taskId={task.path}
+                  projectPath={projectPath || task?.path}
+                  worktreeId={task.id}
+                  worktreeBranch={task.branch}
                   activityId={task.agentId ? `${task.agentId}-main-${task.id}` : undefined}
                   activityProvider={task.agentId}
                   className="min-h-0 flex-1 border-b border-border"

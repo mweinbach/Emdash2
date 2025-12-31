@@ -237,6 +237,8 @@ export function installPlatformBridge() {
     generatePrContent: async () => ({ success: false, error: 'not implemented' }),
     createPullRequest: async () => ({ success: false, error: 'not implemented' }),
     getPrStatus: async () => ({ success: false, error: 'not implemented' }),
+    getPrComments: async () => ({ success: false, error: 'not implemented' }),
+    mergePullRequest: async () => ({ success: false, error: 'not implemented' }),
     getBranchStatus: async () => ({ success: false, error: 'not implemented' }),
     listRemoteBranches: async () => ({ success: false, error: 'not implemented' }),
   };
@@ -479,6 +481,18 @@ export function installPlatformBridge() {
           });
         (window as any).desktopAPI.getPrStatus = (args: { taskPath: string }) =>
           invoke('git_get_pr_status', { taskPath: args.taskPath });
+        (window as any).desktopAPI.getPrComments = (args: { taskPath: string }) =>
+          invoke('git_get_pr_comments', { taskPath: args.taskPath });
+        (window as any).desktopAPI.mergePullRequest = (args: {
+          taskPath: string;
+          method?: string;
+          deleteBranch?: boolean;
+        }) =>
+          invoke('git_merge_pr', {
+            taskPath: args.taskPath,
+            method: args.method,
+            deleteBranch: args.deleteBranch,
+          });
         (window as any).desktopAPI.getBranchStatus = (args: { taskPath: string }) =>
           invoke('git_get_branch_status', { taskPath: args.taskPath });
         (window as any).desktopAPI.listRemoteBranches = (args: {

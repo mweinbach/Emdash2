@@ -305,6 +305,14 @@ declare global {
           state: string;
           isDraft?: boolean;
           mergeStateStatus?: string;
+          commentsCount?: number;
+          reviewCount?: number;
+          checksSummary?: {
+            total: number;
+            passed: number;
+            failed: number;
+            pending: number;
+          };
           headRefName?: string;
           baseRefName?: string;
           title?: string;
@@ -313,6 +321,50 @@ declare global {
           deletions?: number;
           changedFiles?: number;
         } | null;
+        error?: string;
+      }>;
+      getPrComments: (args: { taskPath: string }) => Promise<{
+        success: boolean;
+        comments?: Array<{
+          id?: string;
+          type?: 'comment' | 'review';
+          author?: any;
+          body?: string;
+          createdAt?: string;
+          url?: string;
+          state?: string;
+        }>;
+        error?: string;
+      }>;
+      mergePullRequest: (args: {
+        taskPath: string;
+        method?: 'default' | 'merge' | 'squash' | 'rebase';
+        deleteBranch?: boolean;
+      }) => Promise<{
+        success: boolean;
+        pr?: {
+          number: number;
+          url: string;
+          state: string;
+          isDraft?: boolean;
+          mergeStateStatus?: string;
+          commentsCount?: number;
+          reviewCount?: number;
+          checksSummary?: {
+            total: number;
+            passed: number;
+            failed: number;
+            pending: number;
+          };
+          headRefName?: string;
+          baseRefName?: string;
+          title?: string;
+          author?: any;
+          additions?: number;
+          deletions?: number;
+          changedFiles?: number;
+        } | null;
+        output?: string;
         error?: string;
       }>;
       getBranchStatus: (args: { taskPath: string }) => Promise<{
@@ -762,6 +814,76 @@ export interface DesktopAPI {
   }) => Promise<{
     success: boolean;
     url?: string;
+    output?: string;
+    error?: string;
+  }>;
+  getPrStatus: (args: { taskPath: string }) => Promise<{
+    success: boolean;
+    pr?: {
+      number: number;
+      url: string;
+      state: string;
+      isDraft?: boolean;
+      mergeStateStatus?: string;
+      commentsCount?: number;
+      reviewCount?: number;
+      checksSummary?: {
+        total: number;
+        passed: number;
+        failed: number;
+        pending: number;
+      };
+      headRefName?: string;
+      baseRefName?: string;
+      title?: string;
+      author?: any;
+      additions?: number;
+      deletions?: number;
+      changedFiles?: number;
+    } | null;
+    error?: string;
+  }>;
+  getPrComments: (args: { taskPath: string }) => Promise<{
+    success: boolean;
+    comments?: Array<{
+      id?: string;
+      type?: 'comment' | 'review';
+      author?: any;
+      body?: string;
+      createdAt?: string;
+      url?: string;
+      state?: string;
+    }>;
+    error?: string;
+  }>;
+  mergePullRequest: (args: {
+    taskPath: string;
+    method?: 'default' | 'merge' | 'squash' | 'rebase';
+    deleteBranch?: boolean;
+  }) => Promise<{
+    success: boolean;
+    pr?: {
+      number: number;
+      url: string;
+      state: string;
+      isDraft?: boolean;
+      mergeStateStatus?: string;
+      commentsCount?: number;
+      reviewCount?: number;
+      checksSummary?: {
+        total: number;
+        passed: number;
+        failed: number;
+        pending: number;
+      };
+      headRefName?: string;
+      baseRefName?: string;
+      title?: string;
+      author?: any;
+      additions?: number;
+      deletions?: number;
+      changedFiles?: number;
+    } | null;
     output?: string;
     error?: string;
   }>;

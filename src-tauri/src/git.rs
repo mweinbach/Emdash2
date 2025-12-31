@@ -1068,6 +1068,50 @@ pub async fn git_get_branch_status(task_path: String) -> Value {
   .await
 }
 
+fn normalize_status_check_state(raw: &str) -> &'static str {
+  let value = raw.trim().to_ascii_lowercase();
+  match value.as_str() {
+    "success" | "neutral" | "skipped" | "passed" => "passed",
+    "failure" | "failed" | "cancelled" | "timed_out" | "action_required" | "error" => "failed",
+    "in_progress" | "queued" | "pending" | "waiting" | "requested" => "pending",
+    _ => "pending",
+  }
+}
+
+fn summarize_status_checks(data: &Value) -> Option<Value> {
+  let rollup = data.get("statusCheckRollup")?.as_array()?;
+  if rollup.is_empty() {
+    return None;
+  }
+
+  let mut total = 0;
+  let mut passed = 0;
+  let mut failed = 0;
+  let mut pending = 0;
+
+  for item in rollup {
+    total += 1;
+    let state = item
+      .get("conclusion")
+      .and_then(|v| v.as_str())
+      .or_else(|| item.get("state").and_then(|v| v.as_str()))
+      .or_else(|| item.get("status").and_then(|v| v.as_str()))
+      .unwrap_or("");
+    match normalize_status_check_state(state) {
+      "passed" => passed += 1,
+      "failed" => failed += 1,
+      _ => pending += 1,
+    }
+  }
+
+  Some(json!({
+    "total": total,
+    "passed": passed,
+    "failed": failed,
+    "pending": pending
+  }))
+}
+
 fn git_get_pr_status_sync(task_path: String) -> Value {
   let resolved_path = resolve_real_path(Path::new(&task_path));
   if let Err(err) = run_git(&resolved_path, &["rev-parse", "--is-inside-work-tree"]) {
@@ -1087,6 +1131,9 @@ fn git_get_pr_status_sync(task_path: String) -> Value {
     "additions",
     "deletions",
     "changedFiles",
+    "comments",
+    "reviews",
+    "statusCheckRollup",
   ];
 
   let mut args = vec!["pr", "view", "--json"];
@@ -1100,10 +1147,34 @@ fn git_get_pr_status_sync(task_path: String) -> Value {
     Ok(out) => out,
     Err(err) => {
       let lowered = err.to_lowercase();
-      if lowered.contains("no pull request") || lowered.contains("not found") {
+      if lowered.contains("unknown field") && lowered.contains("statuscheckrollup") {
+        let fallback_fields = fields
+          .iter()
+          .copied()
+          .filter(|field| *field != "statusCheckRollup")
+          .collect::<Vec<&str>>();
+        let fallback_joined = fallback_fields.join(",");
+        let mut fallback_args = vec!["pr", "view", "--json"];
+        fallback_args.push(fallback_joined.as_str());
+        fallback_args.push("-q");
+        fallback_args.push(".");
+        match run_cmd("gh", &fallback_args, Some(&resolved_path)) {
+          Ok(out) => out,
+          Err(fallback_err) => {
+            let fallback_lowered = fallback_err.to_lowercase();
+            if fallback_lowered.contains("no pull request")
+              || fallback_lowered.contains("not found")
+            {
+              return json!({ "success": true, "pr": null });
+            }
+            return json!({ "success": false, "error": fallback_err });
+          }
+        }
+      } else if lowered.contains("no pull request") || lowered.contains("not found") {
         return json!({ "success": true, "pr": null });
+      } else {
+        return json!({ "success": false, "error": err });
       }
-      return json!({ "success": false, "error": err });
     }
   };
 
@@ -1167,6 +1238,29 @@ fn git_get_pr_status_sync(task_path: String) -> Value {
     }
   }
 
+  let checks_summary = summarize_status_checks(&data);
+  let comments_count = data
+    .get("comments")
+    .and_then(|v| v.as_array())
+    .map(|arr| arr.len() as i64)
+    .unwrap_or(0);
+  let review_count = data
+    .get("reviews")
+    .and_then(|v| v.as_array())
+    .map(|arr| arr.len() as i64)
+    .unwrap_or(0);
+
+  if let Some(obj) = data.as_object_mut() {
+    if let Some(summary) = checks_summary {
+      obj.insert("checksSummary".to_string(), summary);
+    }
+    obj.insert("commentsCount".to_string(), json!(comments_count));
+    obj.insert("reviewCount".to_string(), json!(review_count));
+    obj.remove("comments");
+    obj.remove("reviews");
+    obj.remove("statusCheckRollup");
+  }
+
   json!({ "success": true, "pr": data })
 }
 
@@ -1176,6 +1270,103 @@ pub async fn git_get_pr_status(task_path: String) -> Value {
   run_blocking(
     json!({ "success": false, "error": "git_get_pr_status failed", "taskPath": fallback_path }),
     move || git_get_pr_status_sync(task_path),
+  )
+  .await
+}
+
+fn git_get_pr_comments_sync(task_path: String) -> Value {
+  let resolved_path = resolve_real_path(Path::new(&task_path));
+  if let Err(err) = run_git(&resolved_path, &["rev-parse", "--is-inside-work-tree"]) {
+    return json!({ "success": false, "error": err });
+  }
+
+  let args = ["pr", "view", "--json", "comments,reviews", "-q", "."];
+  let raw = match run_cmd("gh", &args, Some(&resolved_path)) {
+    Ok(out) => out,
+    Err(err) => {
+      let lowered = err.to_lowercase();
+      if lowered.contains("no pull request") || lowered.contains("not found") {
+        return json!({ "success": true, "comments": [] });
+      }
+      return json!({ "success": false, "error": err });
+    }
+  };
+
+  let data: Value = match serde_json::from_str(raw.trim()) {
+    Ok(value) => value,
+    Err(err) => return json!({ "success": false, "error": err.to_string() }),
+  };
+
+  let mut items: Vec<Value> = Vec::new();
+
+  if let Some(comments) = data.get("comments").and_then(|v| v.as_array()) {
+    for comment in comments {
+      let body = comment
+        .get("body")
+        .cloned()
+        .or_else(|| comment.get("bodyText").cloned())
+        .unwrap_or(Value::Null);
+      let created_at = comment.get("createdAt").cloned().unwrap_or(Value::Null);
+      items.push(json!({
+        "type": "comment",
+        "id": comment.get("id").cloned().unwrap_or(Value::Null),
+        "author": comment.get("author").cloned().unwrap_or(Value::Null),
+        "body": body,
+        "createdAt": created_at,
+        "url": comment.get("url").cloned().unwrap_or(Value::Null)
+      }));
+    }
+  }
+
+  if let Some(reviews) = data.get("reviews").and_then(|v| v.as_array()) {
+    for review in reviews {
+      let body = review
+        .get("body")
+        .cloned()
+        .or_else(|| review.get("bodyText").cloned())
+        .unwrap_or(Value::Null);
+      let created_at = review
+        .get("submittedAt")
+        .cloned()
+        .or_else(|| review.get("createdAt").cloned())
+        .unwrap_or(Value::Null);
+      items.push(json!({
+        "type": "review",
+        "id": review.get("id").cloned().unwrap_or(Value::Null),
+        "author": review.get("author").cloned().unwrap_or(Value::Null),
+        "body": body,
+        "createdAt": created_at,
+        "url": review.get("url").cloned().unwrap_or(Value::Null),
+        "state": review.get("state").cloned().unwrap_or(Value::Null)
+      }));
+    }
+  }
+
+  items.sort_by(|a, b| {
+    let a_ts = a
+      .get("createdAt")
+      .and_then(|v| v.as_str())
+      .unwrap_or("");
+    let b_ts = b
+      .get("createdAt")
+      .and_then(|v| v.as_str())
+      .unwrap_or("");
+    b_ts.cmp(a_ts)
+  });
+
+  json!({ "success": true, "comments": items })
+}
+
+#[tauri::command]
+pub async fn git_get_pr_comments(task_path: String) -> Value {
+  let fallback_path = task_path.clone();
+  run_blocking(
+    json!({
+      "success": false,
+      "error": "git_get_pr_comments failed",
+      "taskPath": fallback_path,
+    }),
+    move || git_get_pr_comments_sync(task_path),
   )
   .await
 }
@@ -2174,6 +2365,67 @@ pub async fn git_create_pr(
   run_blocking(
     json!({ "success": false, "error": "git_create_pr failed", "taskPath": fallback_path }),
     move || git_create_pr_sync(task_path, title, body, base, head, draft, web, fill),
+  )
+  .await
+}
+
+fn git_merge_pr_sync(task_path: String, method: Option<String>, delete_branch: Option<bool>) -> Value {
+  let resolved_path = resolve_real_path(Path::new(&task_path));
+  if let Err(err) = run_git(&resolved_path, &["rev-parse", "--is-inside-work-tree"]) {
+    return json!({ "success": false, "error": err });
+  }
+
+  let mut args: Vec<&str> = vec!["pr", "merge", "--yes"];
+  if let Some(raw_method) = method {
+    let normalized = raw_method.trim().to_ascii_lowercase();
+    match normalized.as_str() {
+      "merge" => args.push("--merge"),
+      "squash" => args.push("--squash"),
+      "rebase" => args.push("--rebase"),
+      _ => {}
+    }
+  }
+  if delete_branch.unwrap_or(false) {
+    args.push("--delete-branch");
+  }
+  args.push(".");
+
+  let (success, stdout, stderr) = match run_cmd_output("gh", &args, Some(&resolved_path)) {
+    Ok(result) => result,
+    Err(err) => return json!({ "success": false, "error": err }),
+  };
+
+  let combined = [stdout.trim().to_string(), stderr.trim().to_string()]
+    .into_iter()
+    .filter(|s| !s.trim().is_empty())
+    .collect::<Vec<String>>()
+    .join("\n")
+    .trim()
+    .to_string();
+
+  if !success {
+    let lowered = combined.to_lowercase();
+    if lowered.contains("no pull request") || lowered.contains("not found") {
+      return json!({ "success": false, "error": "No pull request found for this branch." });
+    }
+    return json!({ "success": false, "error": combined, "output": combined });
+  }
+
+  let pr_status = git_get_pr_status_sync(task_path);
+  let pr_value = pr_status.get("pr").cloned();
+  json!({ "success": true, "output": combined, "pr": pr_value })
+}
+
+#[tauri::command]
+pub async fn git_merge_pr(
+  task_path: String,
+  method: Option<String>,
+  delete_branch: Option<bool>,
+) -> Value {
+  let fallback_path = task_path.clone();
+  run_blocking(
+    json!({ "success": false, "error": "git_merge_pr failed", "taskPath": fallback_path }),
+    move || git_merge_pr_sync(task_path, method, delete_branch),
   )
   .await
 }
