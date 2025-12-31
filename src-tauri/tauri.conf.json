@@ -1,6 +1,6 @@
 {
   "productName": "Emdash2",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "identifier": "com.emdash2",
   "build": {
     "beforeDevCommand": "bun run dev:renderer",

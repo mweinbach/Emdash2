@@ -42,7 +42,7 @@ fi
 echo "Building (tauri build)..."
 (cd "$ROOT_DIR" && bun run build)
 
-DMG_PATH="$(ls -1t "$DMG_DIR"/*.dmg | head -n 1)"
+DMG_PATH="$(ls -1t "$DMG_DIR"/*.dmg | grep -v '_notarized\.dmg$' | head -n 1)"
 echo "Built DMG: $DMG_PATH"
 
 WORK_DIR="$(mktemp -d)"
