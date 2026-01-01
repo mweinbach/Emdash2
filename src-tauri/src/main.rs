@@ -175,6 +175,7 @@ fn main() {
       git::git_get_branch_status,
       git::git_get_pr_status,
       git::git_get_pr_comments,
+      git::git_get_pr_changes,
       git::git_list_remote_branches,
       git::git_generate_pr_content,
       git::git_create_pr,

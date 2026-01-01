@@ -336,6 +336,24 @@ declare global {
         }>;
         error?: string;
       }>;
+      getPrChanges: (args: { taskPath: string }) => Promise<{
+        success: boolean;
+        pr?: null;
+        commits?: Array<{
+          oid?: string;
+          shortOid?: string;
+          message?: string;
+          author?: string;
+          date?: string;
+        }>;
+        files?: Array<{
+          path: string;
+          additions?: number;
+          deletions?: number;
+          changeType?: string;
+        }>;
+        error?: string;
+      }>;
       mergePullRequest: (args: {
         taskPath: string;
         method?: 'default' | 'merge' | 'squash' | 'rebase';

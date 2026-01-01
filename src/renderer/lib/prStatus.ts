@@ -23,6 +23,21 @@ export type PrComment = {
   state?: string | null;
 };
 
+export type PrCommit = {
+  oid?: string | null;
+  shortOid?: string | null;
+  message?: string | null;
+  author?: string | null;
+  date?: string | null;
+};
+
+export type PrFile = {
+  path: string;
+  additions?: number | null;
+  deletions?: number | null;
+  changeType?: string | null;
+};
+
 export type PrStatus = PrInfo & {
   mergeStateStatus?: string;
   commentsCount?: number;

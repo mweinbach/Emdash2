@@ -18,7 +18,9 @@ export function usePrStatus(taskPath?: string) {
     }
 
     setTimeout(() => setPr(null), 0); // Clear stale data before subscribing to new task
-    return subscribeToPrStatus(taskPath, setPr);
+    const unsubscribe = subscribeToPrStatus(taskPath, setPr);
+    refreshPrStatus(taskPath).catch(() => {});
+    return unsubscribe;
   }, [taskPath]);
 
   return { pr, refresh };

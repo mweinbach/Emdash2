@@ -1371,6 +1371,162 @@ pub async fn git_get_pr_comments(task_path: String) -> Value {
   .await
 }
 
+fn git_get_pr_changes_sync(task_path: String) -> Value {
+  let resolved_path = resolve_real_path(Path::new(&task_path));
+  if let Err(err) = run_git(&resolved_path, &["rev-parse", "--is-inside-work-tree"]) {
+    return json!({ "success": false, "error": err });
+  }
+
+  let parse_i64 = |value: &Value| -> Option<i64> {
+    value
+      .as_i64()
+      .or_else(|| value.as_str().and_then(|s| s.parse::<i64>().ok()))
+  };
+
+  let parse_string = |value: &Value| -> Option<String> { value.as_str().map(|s| s.to_string()) };
+
+  let extract_commits = |data: &Value| -> Vec<Value> {
+    let Some(commits) = data.get("commits").and_then(|v| v.as_array()) else {
+      return Vec::new();
+    };
+
+    let mut items = Vec::new();
+    for commit in commits {
+      let commit_base = commit.get("commit").unwrap_or(commit);
+      let oid = commit_base
+        .get("oid")
+        .and_then(parse_string)
+        .or_else(|| commit_base.get("sha").and_then(parse_string))
+        .or_else(|| commit.get("sha").and_then(parse_string));
+      let short_oid = oid.as_ref().map(|s| s.chars().take(7).collect::<String>());
+      let message = commit_base
+        .get("messageHeadline")
+        .and_then(parse_string)
+        .or_else(|| commit_base.get("message").and_then(parse_string))
+        .or_else(|| commit_base.get("title").and_then(parse_string))
+        .or_else(|| commit.get("message").and_then(parse_string))
+        .or_else(|| commit.get("title").and_then(parse_string));
+      let author = commit_base.get("author").or_else(|| commit.get("author")).and_then(|author| {
+        author
+          .get("login")
+          .and_then(parse_string)
+          .or_else(|| author.get("name").and_then(parse_string))
+      });
+      let date = commit_base
+        .get("committedDate")
+        .and_then(parse_string)
+        .or_else(|| commit_base.get("authoredDate").and_then(parse_string))
+        .or_else(|| commit_base.get("date").and_then(parse_string))
+        .or_else(|| commit.get("committedDate").and_then(parse_string))
+        .or_else(|| commit.get("authoredDate").and_then(parse_string))
+        .or_else(|| commit.get("date").and_then(parse_string));
+
+      items.push(json!({
+        "oid": oid,
+        "shortOid": short_oid,
+        "message": message,
+        "author": author,
+        "date": date
+      }));
+    }
+    items
+  };
+
+  let extract_files = |data: &Value| -> Vec<Value> {
+    let Some(files) = data.get("files").and_then(|v| v.as_array()) else {
+      return Vec::new();
+    };
+
+    let mut items = Vec::new();
+    for file in files {
+      let raw_path = file
+        .get("path")
+        .and_then(parse_string)
+        .or_else(|| file.get("filePath").and_then(parse_string))
+        .or_else(|| file.get("filename").and_then(parse_string));
+      let Some(raw_path) = raw_path else {
+        continue;
+      };
+      let path = normalize_git_path(&raw_path);
+      if path.is_empty() {
+        continue;
+      }
+      let additions = file
+        .get("additions")
+        .and_then(parse_i64)
+        .unwrap_or(0);
+      let deletions = file
+        .get("deletions")
+        .and_then(parse_i64)
+        .unwrap_or(0);
+      let change_type = file
+        .get("changeType")
+        .and_then(parse_string)
+        .or_else(|| file.get("status").and_then(parse_string))
+        .map(|value| value.to_ascii_lowercase());
+
+      items.push(json!({
+        "path": path,
+        "additions": additions,
+        "deletions": deletions,
+        "changeType": change_type
+      }));
+    }
+    items
+  };
+
+  let run_pr_view = |fields: &str| -> Result<Value, String> {
+    let args = ["pr", "view", "--json", fields, "-q", "."];
+    let output = run_cmd("gh", &args, Some(&resolved_path))?;
+    serde_json::from_str(output.trim()).map_err(|err| err.to_string())
+  };
+
+  let data = match run_pr_view("commits,files") {
+    Ok(value) => value,
+    Err(err) => {
+      let lowered = err.to_lowercase();
+      if lowered.contains("no pull request") || lowered.contains("not found") {
+        return json!({
+          "success": true,
+          "pr": null,
+          "commits": Vec::<Value>::new(),
+          "files": Vec::<Value>::new()
+        });
+      }
+      if lowered.contains("unknown field") {
+        let commits_data = run_pr_view("commits").ok();
+        let files_data = run_pr_view("files").ok();
+        if commits_data.is_none() && files_data.is_none() {
+          return json!({ "success": false, "error": err });
+        }
+        let commits = commits_data.as_ref().map(extract_commits).unwrap_or_default();
+        let files = files_data.as_ref().map(extract_files).unwrap_or_default();
+        return json!({ "success": true, "commits": commits, "files": files });
+      }
+      return json!({ "success": false, "error": err });
+    }
+  };
+
+  let commits = extract_commits(&data);
+  let files = extract_files(&data);
+
+  json!({ "success": true, "commits": commits, "files": files })
+}
+
+#[tauri::command]
+pub async fn git_get_pr_changes(task_path: String) -> Value {
+  let fallback_path = task_path.clone();
+  run_blocking(
+    json!({
+      "success": false,
+      "error": "git_get_pr_changes failed",
+      "taskPath": fallback_path,
+    }),
+    move || git_get_pr_changes_sync(task_path),
+  )
+  .await
+}
+
 fn git_list_remote_branches_sync(project_path: String, remote: Option<String>) -> Value {
   if project_path.trim().is_empty() {
     return json!({ "success": false, "error": "projectPath is required" });
@@ -2375,7 +2531,7 @@ fn git_merge_pr_sync(task_path: String, method: Option<String>, delete_branch: O
     return json!({ "success": false, "error": err });
   }
 
-  let mut args: Vec<&str> = vec!["pr", "merge", "--yes"];
+  let mut args: Vec<&str> = vec!["pr", "merge"];
   if let Some(raw_method) = method {
     let normalized = raw_method.trim().to_ascii_lowercase();
     match normalized.as_str() {

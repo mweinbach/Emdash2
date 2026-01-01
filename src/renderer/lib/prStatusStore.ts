@@ -3,19 +3,30 @@ import type { PrStatus } from './prStatus';
 type Listener = (pr: PrStatus | null) => void;
 
 const cache = new Map<string, PrStatus | null>();
+const lastFetched = new Map<string, number>();
 const listeners = new Map<string, Set<Listener>>();
 const pending = new Map<string, Promise<PrStatus | null>>();
+const DEFAULT_STALE_MS = 60_000;
 
 async function fetchPrStatus(taskPath: string): Promise<PrStatus | null> {
   try {
     const res = await window.desktopAPI.getPrStatus({ taskPath });
     if (res?.success && res.pr) {
+      lastFetched.set(taskPath, Date.now());
       return res.pr as PrStatus;
     }
+    lastFetched.set(taskPath, Date.now());
     return null;
   } catch (error) {
     return null;
   }
+}
+
+function isStale(taskPath: string, cached: PrStatus | null | undefined, staleMs: number) {
+  if (!cached) return true;
+  const ts = lastFetched.get(taskPath);
+  if (!ts) return true;
+  return Date.now() - ts > staleMs;
 }
 
 export async function refreshPrStatus(taskPath: string): Promise<PrStatus | null> {
@@ -59,9 +70,9 @@ export function subscribeToPrStatus(taskPath: string, listener: Listener): () =>
     } catch {}
   }
 
-  // Trigger fetch if not cached
-  if (!cache.has(taskPath) && !pending.has(taskPath)) {
-    refreshPrStatus(taskPath);
+  // Trigger fetch if not cached or if data is stale
+  if (!pending.has(taskPath) && (cached === undefined || isStale(taskPath, cached, DEFAULT_STALE_MS))) {
+    refreshPrStatus(taskPath).catch(() => {});
   }
 
   return () => {

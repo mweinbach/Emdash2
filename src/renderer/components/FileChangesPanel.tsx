@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Spinner } from './ui/spinner';
@@ -22,12 +22,14 @@ import { useCreatePR } from '../hooks/useCreatePR';
 import ChangesDiffModal from './ChangesDiffModal';
 import AllChangesDiffModal from './AllChangesDiffModal';
 import { useFileChanges } from '../hooks/useFileChanges';
+import { usePrChanges } from '../hooks/usePrChanges';
 import { usePrStatus } from '../hooks/usePrStatus';
 import { usePtyBusy } from '../hooks/usePtyBusy';
 import { isActivePr } from '../lib/prStatus';
 import type { PrComment } from '../lib/prStatus';
 import FileTypeIcon from './ui/file-type-icon';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
+import { Streamdown } from 'streamdown';
 import {
   Plus,
   Undo2,
@@ -37,6 +39,7 @@ import {
   MessageSquare,
   GitMerge,
   Archive,
+  RefreshCw,
 } from 'lucide-react';
 
 interface FileChangesPanelProps {
@@ -99,6 +102,14 @@ const FileChangesPanelComponent: React.FC<FileChangesPanelProps> = ({
   const hasStagedChanges = fileChanges.some((change) => change.isStaged);
   const isBusy = usePtyBusy(activityId, activityProvider);
   const { pr, refresh: refreshPr } = usePrStatus(taskId);
+  const [viewMode, setViewMode] = useState<'working' | 'pr'>('working');
+  const {
+    commits: prCommits,
+    files: prFiles,
+    loading: prChangesLoading,
+    error: prChangesError,
+    refresh: refreshPrChanges,
+  } = usePrChanges(taskId, Boolean(pr && viewMode === 'pr'));
   const [branchAhead, setBranchAhead] = useState<number | null>(null);
   const [branchStatusLoading, setBranchStatusLoading] = useState<boolean>(false);
   const stagedCount = fileChanges.filter((f) => f.isStaged).length;
@@ -212,6 +223,19 @@ const FileChangesPanelComponent: React.FC<FileChangesPanelProps> = ({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [taskId, hasChanges]);
+
+  useEffect(() => {
+    if (!taskId) return;
+    if (!pr) {
+      setViewMode('working');
+      return;
+    }
+    if (fileChanges.length === 0) {
+      setViewMode('pr');
+    } else {
+      setViewMode('working');
+    }
+  }, [fileChanges.length, pr?.number, taskId]);
 
   useEffect(() => {
     setIsCollapsed(defaultCollapsed);
@@ -517,13 +541,75 @@ const FileChangesPanelComponent: React.FC<FileChangesPanelProps> = ({
     );
   };
 
-  const totalChanges = fileChanges.reduce(
-    (acc, change) => ({
-      additions: acc.additions + change.additions,
-      deletions: acc.deletions + change.deletions,
-    }),
-    { additions: 0, deletions: 0 }
+  const changeTypeMeta = (value?: string | null) => {
+    const normalized = value?.toLowerCase() ?? '';
+    if (normalized === 'added') {
+      return {
+        label: 'Added',
+        className:
+          'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-200',
+      };
+    }
+    if (normalized === 'deleted') {
+      return {
+        label: 'Deleted',
+        className:
+          'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-200',
+      };
+    }
+    if (normalized === 'renamed') {
+      return {
+        label: 'Renamed',
+        className:
+          'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200',
+      };
+    }
+    if (normalized === 'copied') {
+      return {
+        label: 'Copied',
+        className:
+          'border-slate-200 bg-slate-100 text-slate-700 dark:border-slate-500/40 dark:bg-slate-500/10 dark:text-slate-200',
+      };
+    }
+    return {
+      label: normalized ? normalized[0].toUpperCase() + normalized.slice(1) : 'Modified',
+      className:
+        'border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-500/40 dark:bg-sky-500/10 dark:text-sky-200',
+    };
+  };
+
+  const workingTotals = useMemo(
+    () =>
+      fileChanges.reduce(
+        (acc, change) => ({
+          additions: acc.additions + change.additions,
+          deletions: acc.deletions + change.deletions,
+        }),
+        { additions: 0, deletions: 0 }
+      ),
+    [fileChanges]
   );
+  const prTotals = useMemo(
+    () =>
+      prFiles.reduce(
+        (acc, change) => ({
+          additions: acc.additions + (change.additions || 0),
+          deletions: acc.deletions + (change.deletions || 0),
+        }),
+        { additions: 0, deletions: 0 }
+      ),
+    [prFiles]
+  );
+  const prAdditions = toNumber(pr?.additions) || prTotals.additions;
+  const prDeletions = toNumber(pr?.deletions) || prTotals.deletions;
+  const activeTotals =
+    viewMode === 'pr'
+      ? { additions: prAdditions, deletions: prDeletions }
+      : workingTotals;
+  const activeFileCount =
+    viewMode === 'pr'
+      ? prFiles.length || toNumber(pr?.changedFiles)
+      : fileChanges.length;
 
   const commentButton = (
     <button
@@ -544,6 +630,234 @@ const FileChangesPanelComponent: React.FC<FileChangesPanelProps> = ({
     </button>
   );
 
+  const prActionControls = pr ? (
+    <>
+      {showChecks ? (
+        <span
+          className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-medium ${checksClass}`}
+        >
+          Checks {checksLabel}
+        </span>
+      ) : null}
+      {supportsPrComments ? (
+        <Popover open={prCommentsOpen} onOpenChange={setPrCommentsOpen}>
+          <PopoverTrigger asChild>{commentButton}</PopoverTrigger>
+          <PopoverContent
+            align="end"
+            className="w-80 border border-border/70 bg-popover p-3 shadow-lift"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-semibold text-muted-foreground">Comments</span>
+              {pr.url ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-[10px]"
+                  onClick={() => {
+                    const prUrl = pr.url;
+                    if (prUrl) window.desktopAPI?.openExternal?.(prUrl);
+                  }}
+                >
+                  Open PR
+                  <ArrowUpRight className="ml-1 h-3 w-3" />
+                </Button>
+              ) : null}
+            </div>
+            <div className="mt-2">
+              {prCommentsLoading ? (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Spinner size="sm" />
+                  Loading comments...
+                </div>
+              ) : prCommentsError ? (
+                <div className="text-xs text-rose-600 dark:text-rose-300">
+                  {prCommentsError}
+                </div>
+              ) : prComments.length === 0 ? (
+                <div className="text-xs text-muted-foreground">No comments yet.</div>
+              ) : (
+                <ScrollArea className="h-72 max-h-72">
+                  <div className="space-y-2 pr-2">
+                    {prComments.map((comment, index) => {
+                      const authorLabel =
+                        comment.author && typeof comment.author === 'object'
+                          ? String(
+                              (comment.author as any).login ||
+                                (comment.author as any).name ||
+                                'Unknown'
+                            )
+                          : 'Unknown';
+                      const body = typeof comment.body === 'string' ? comment.body.trim() : '';
+                      const reviewState = formatReviewState(comment.state || undefined);
+                      const content = body || reviewState || 'No comment';
+                      const timestamp = formatTimestamp(comment.createdAt || undefined);
+                      const typeLabel = comment.type === 'review' ? 'Review' : 'Comment';
+                      return (
+                        <div
+                          key={`${comment.id ?? 'comment'}-${index}`}
+                          className="rounded-md border border-border/60 bg-surface/70 px-2 py-2"
+                        >
+                          <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                            <span className="font-medium text-foreground">{authorLabel}</span>
+                            <span className="rounded border border-border/70 bg-background px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                              {typeLabel}
+                            </span>
+                            {reviewState ? (
+                              <span className="rounded border border-border/70 bg-background px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                                {reviewState}
+                              </span>
+                            ) : null}
+                            {timestamp ? (
+                              <span className="ml-auto text-[10px] text-muted-foreground/80">
+                                {timestamp}
+                              </span>
+                            ) : null}
+                          </div>
+                          <div className="mt-1 text-xs text-foreground/90">
+                            <Streamdown className="streamdown text-xs leading-relaxed">
+                              {content}
+                            </Streamdown>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </ScrollArea>
+              )}
+            </div>
+          </PopoverContent>
+        </Popover>
+      ) : (
+        commentButton
+      )}
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          const prUrl = pr.url;
+          if (prUrl) window.desktopAPI?.openExternal?.(prUrl);
+        }}
+        className="inline-flex items-center gap-1 rounded border border-border bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+        title={`${pr.title || 'Pull Request'} (#${pr.number})`}
+      >
+        View PR
+        <ArrowUpRight className="size-3" />
+      </button>
+      {isPrOpen ? (
+        <AlertDialog open={mergeOpen} onOpenChange={setMergeOpen}>
+          <AlertDialogTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 px-2 text-[10px]"
+              disabled={!canMerge || isMerging}
+              title={mergeDisabledReason}
+            >
+              {isMerging ? <Spinner size="sm" className="mr-1" /> : null}
+              <GitMerge className="mr-1 h-3 w-3" />
+              Merge
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Merge pull request</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will merge the PR into the base branch.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <span className="text-xs font-medium text-muted-foreground">Merge method</span>
+                <Select
+                  value={mergeMethod}
+                  onValueChange={(value) =>
+                    setMergeMethod(value as 'default' | 'merge' | 'squash' | 'rebase')
+                  }
+                >
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue placeholder="Select method" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="default">Default</SelectItem>
+                    <SelectItem value="merge">Merge commit</SelectItem>
+                    <SelectItem value="squash">Squash</SelectItem>
+                    <SelectItem value="rebase">Rebase</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {showChecks ? (
+                <div className="text-xs text-muted-foreground">Checks: {checksLabel}</div>
+              ) : null}
+            </div>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={isMerging}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-primary px-4 py-2 text-primary-foreground hover:bg-primary/90"
+                disabled={!canMerge || isMerging}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void handleMergePullRequest();
+                }}
+              >
+                {isMerging ? <Spinner className="mr-2 h-4 w-4" size="sm" /> : null}
+                Merge
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      ) : null}
+      {canArchive ? (
+        <AlertDialog open={archiveOpen} onOpenChange={setArchiveOpen}>
+          <AlertDialogTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 px-2 text-[10px]"
+              disabled={isArchiving}
+            >
+              {isArchiving ? <Spinner size="sm" className="mr-1" /> : null}
+              <Archive className="mr-1 h-3 w-3" />
+              Archive
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Archive worktree</AlertDialogTitle>
+              <AlertDialogDescription>
+                Remove the worktree directory and optionally delete the branch.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <div className="space-y-3 text-sm">
+              <label className="flex items-center gap-2">
+                <Checkbox
+                  checked={deleteBranchOnArchive}
+                  onCheckedChange={(checked) => setDeleteBranchOnArchive(Boolean(checked))}
+                />
+                <span className="text-sm text-foreground">
+                  Delete branch{worktreeBranch ? ` (${worktreeBranch})` : ''}
+                </span>
+              </label>
+            </div>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={isArchiving}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive px-4 py-2 text-destructive-foreground hover:bg-destructive/90"
+                disabled={isArchiving}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void handleArchiveWorktree();
+                }}
+              >
+                {isArchiving ? <Spinner className="mr-2 h-4 w-4" size="sm" /> : null}
+                Archive
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      ) : null}
+    </>
+  ) : null;
+
   return (
     <div className={`flex h-full flex-col bg-card/80 shadow-sm ${className}`}>
       <div className="bg-surface-2 px-3 py-2">
@@ -562,11 +876,11 @@ const FileChangesPanelComponent: React.FC<FileChangesPanelProps> = ({
               </span>
               <div className="flex shrink-0 items-center gap-1 text-xs">
                 <span className="font-medium text-green-600 dark:text-green-400">
-                  +{totalChanges.additions}
+                  +{activeTotals.additions}
                 </span>
                 <span className="text-muted-foreground/70">•</span>
                 <span className="font-medium text-red-600 dark:text-red-400">
-                  -{totalChanges.deletions}
+                  -{activeTotals.deletions}
                 </span>
               </div>
             </div>
@@ -614,24 +928,77 @@ const FileChangesPanelComponent: React.FC<FileChangesPanelProps> = ({
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
               <span className="truncate text-sm font-medium text-foreground">
-                {fileChanges.length} files changed
+                {activeFileCount} {viewMode === 'pr' ? 'PR files' : 'files changed'}
               </span>
-              {hasStagedChanges && (
+              {viewMode === 'working' && hasStagedChanges && (
                 <span className="shrink-0 rounded bg-surface-3 px-2 py-0.5 text-xs font-medium text-foreground/80">
                   {stagedCount} staged
                 </span>
               )}
+              {pr ? (
+                <div className="shrink-0 rounded-md border border-border/70 bg-muted/30 p-0.5 text-[10px] font-semibold text-muted-foreground">
+                  <button
+                    type="button"
+                    onClick={() => setViewMode('working')}
+                    aria-pressed={viewMode === 'working'}
+                    className={`rounded px-2 py-0.5 transition-colors ${
+                      viewMode === 'working'
+                        ? 'bg-background text-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    Working
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setViewMode('pr')}
+                    aria-pressed={viewMode === 'pr'}
+                    className={`rounded px-2 py-0.5 transition-colors ${
+                      viewMode === 'pr'
+                        ? 'bg-background text-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    Pull Request
+                  </button>
+                </div>
+              ) : null}
             </div>
             <div className="flex shrink-0 items-center gap-2">
               <Button
                 variant="outline"
                 size="sm"
                 className="h-8 shrink-0 border-border/70 px-2 text-xs text-foreground/80"
-                title="View all changes in a single scrollable view"
-                onClick={() => setShowAllChangesModal(true)}
+                title={
+                  viewMode === 'pr'
+                    ? 'Refresh pull request details'
+                    : 'View all changes in a single scrollable view'
+                }
+                disabled={viewMode === 'pr' ? prChangesLoading : false}
+                onClick={() => {
+                  if (viewMode === 'pr') {
+                    void refreshPr();
+                    void refreshPrChanges();
+                    if (prCommentsOpen) {
+                      void loadPrComments();
+                    }
+                  } else {
+                    setShowAllChangesModal(true);
+                  }
+                }}
               >
-                <FileDiff className="h-3.5 w-3.5 sm:mr-1.5" />
-                <span className="hidden sm:inline">Check Changes</span>
+                {viewMode === 'pr' ? (
+                  <RefreshCw className="h-3.5 w-3.5 sm:mr-1.5" />
+                ) : (
+                  <FileDiff className="h-3.5 w-3.5 sm:mr-1.5" />
+                )}
+                <span className="hidden sm:inline">
+                  {viewMode === 'pr'
+                    ? prChangesLoading
+                      ? 'Refreshing...'
+                      : 'Refresh PR'
+                    : 'Check Changes'}
+                </span>
               </Button>
               {pr ? (
                 <div className="flex flex-wrap items-center gap-1.5">
@@ -640,238 +1007,7 @@ const FileChangesPanelComponent: React.FC<FileChangesPanelProps> = ({
                   >
                     {prStateLabel}
                   </span>
-                  {showChecks ? (
-                    <span
-                      className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-medium ${checksClass}`}
-                    >
-                      Checks {checksLabel}
-                    </span>
-                  ) : null}
-                  {supportsPrComments ? (
-                    <Popover open={prCommentsOpen} onOpenChange={setPrCommentsOpen}>
-                      <PopoverTrigger asChild>{commentButton}</PopoverTrigger>
-                      <PopoverContent
-                        align="end"
-                        className="w-80 border border-border/70 bg-popover p-3 shadow-lift"
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-xs font-semibold text-muted-foreground">
-                            Comments
-                          </span>
-                          {pr.url ? (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 px-2 text-[10px]"
-                              onClick={() => {
-                                const prUrl = pr.url;
-                                if (prUrl) window.desktopAPI?.openExternal?.(prUrl);
-                              }}
-                            >
-                              Open PR
-                              <ArrowUpRight className="ml-1 h-3 w-3" />
-                            </Button>
-                          ) : null}
-                        </div>
-                        <div className="mt-2">
-                          {prCommentsLoading ? (
-                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                              <Spinner size="sm" />
-                              Loading comments...
-                            </div>
-                          ) : prCommentsError ? (
-                            <div className="text-xs text-rose-600 dark:text-rose-300">
-                              {prCommentsError}
-                            </div>
-                          ) : prComments.length === 0 ? (
-                            <div className="text-xs text-muted-foreground">No comments yet.</div>
-                          ) : (
-                            <ScrollArea className="max-h-72">
-                              <div className="space-y-2 pr-2">
-                                {prComments.map((comment, index) => {
-                                  const authorLabel =
-                                    comment.author && typeof comment.author === 'object'
-                                      ? String(
-                                          (comment.author as any).login ||
-                                            (comment.author as any).name ||
-                                            'Unknown'
-                                        )
-                                      : 'Unknown';
-                                  const body =
-                                    typeof comment.body === 'string' ? comment.body.trim() : '';
-                                  const reviewState = formatReviewState(comment.state || undefined);
-                                  const content = body || reviewState || 'No comment';
-                                  const timestamp = formatTimestamp(comment.createdAt || undefined);
-                                  const typeLabel = comment.type === 'review' ? 'Review' : 'Comment';
-                                  return (
-                                    <div
-                                      key={`${comment.id ?? 'comment'}-${index}`}
-                                      className="rounded-md border border-border/60 bg-surface/70 px-2 py-2"
-                                    >
-                                      <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-                                        <span className="font-medium text-foreground">
-                                          {authorLabel}
-                                        </span>
-                                        <span className="rounded border border-border/70 bg-background px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-                                          {typeLabel}
-                                        </span>
-                                        {reviewState ? (
-                                          <span className="rounded border border-border/70 bg-background px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-                                            {reviewState}
-                                          </span>
-                                        ) : null}
-                                        {timestamp ? (
-                                          <span className="ml-auto text-[10px] text-muted-foreground/80">
-                                            {timestamp}
-                                          </span>
-                                        ) : null}
-                                      </div>
-                                      <div className="mt-1 whitespace-pre-wrap text-xs text-foreground/90">
-                                        {content}
-                                      </div>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </ScrollArea>
-                          )}
-                        </div>
-                      </PopoverContent>
-                    </Popover>
-                  ) : (
-                    commentButton
-                  )}
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      const prUrl = pr.url;
-                      if (prUrl) window.desktopAPI?.openExternal?.(prUrl);
-                    }}
-                    className="inline-flex items-center gap-1 rounded border border-border bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-                    title={`${pr.title || 'Pull Request'} (#${pr.number})`}
-                  >
-                    View PR
-                    <ArrowUpRight className="size-3" />
-                  </button>
-                  {isPrOpen ? (
-                    <AlertDialog open={mergeOpen} onOpenChange={setMergeOpen}>
-                      <AlertDialogTrigger asChild>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-7 px-2 text-[10px]"
-                          disabled={!canMerge || isMerging}
-                          title={mergeDisabledReason}
-                        >
-                          {isMerging ? <Spinner size="sm" className="mr-1" /> : null}
-                          <GitMerge className="mr-1 h-3 w-3" />
-                          Merge
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Merge pull request</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            This will merge the PR into the base branch.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <div className="space-y-3">
-                          <div className="space-y-1">
-                            <span className="text-xs font-medium text-muted-foreground">
-                              Merge method
-                            </span>
-                            <Select
-                              value={mergeMethod}
-                              onValueChange={(value) =>
-                                setMergeMethod(value as 'default' | 'merge' | 'squash' | 'rebase')
-                              }
-                            >
-                              <SelectTrigger className="h-8 text-xs">
-                                <SelectValue placeholder="Select method" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="default">Default</SelectItem>
-                                <SelectItem value="merge">Merge commit</SelectItem>
-                                <SelectItem value="squash">Squash</SelectItem>
-                                <SelectItem value="rebase">Rebase</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          {showChecks ? (
-                            <div className="text-xs text-muted-foreground">
-                              Checks: {checksLabel}
-                            </div>
-                          ) : null}
-                        </div>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel disabled={isMerging}>Cancel</AlertDialogCancel>
-                          <AlertDialogAction
-                            className="bg-primary px-4 py-2 text-primary-foreground hover:bg-primary/90"
-                            disabled={!canMerge || isMerging}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              void handleMergePullRequest();
-                            }}
-                          >
-                            {isMerging ? <Spinner className="mr-2 h-4 w-4" size="sm" /> : null}
-                            Merge
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  ) : null}
-                  {canArchive ? (
-                    <AlertDialog open={archiveOpen} onOpenChange={setArchiveOpen}>
-                      <AlertDialogTrigger asChild>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-7 px-2 text-[10px]"
-                          disabled={isArchiving}
-                        >
-                          {isArchiving ? <Spinner size="sm" className="mr-1" /> : null}
-                          <Archive className="mr-1 h-3 w-3" />
-                          Archive
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Archive worktree</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            Remove the worktree directory and optionally delete the branch.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <div className="space-y-3 text-sm">
-                          <label className="flex items-center gap-2">
-                            <Checkbox
-                              checked={deleteBranchOnArchive}
-                              onCheckedChange={(checked) =>
-                                setDeleteBranchOnArchive(Boolean(checked))
-                              }
-                            />
-                            <span className="text-sm text-foreground">
-                              Delete branch{worktreeBranch ? ` (${worktreeBranch})` : ''}
-                            </span>
-                          </label>
-                        </div>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel disabled={isArchiving}>Cancel</AlertDialogCancel>
-                          <AlertDialogAction
-                            className="bg-destructive px-4 py-2 text-destructive-foreground hover:bg-destructive/90"
-                            disabled={isArchiving}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              void handleArchiveWorktree();
-                            }}
-                          >
-                            {isArchiving ? <Spinner className="mr-2 h-4 w-4" size="sm" /> : null}
-                            Archive
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  ) : null}
+                  {viewMode !== 'pr' ? prActionControls : null}
                 </div>
               ) : (
                 <Button
@@ -905,8 +1041,13 @@ const FileChangesPanelComponent: React.FC<FileChangesPanelProps> = ({
               )}
             </div>
           </div>
+          {pr && viewMode === 'pr' ? (
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              {prActionControls}
+            </div>
+          ) : null}
 
-          {!isCollapsed && hasStagedChanges && (
+          {!isCollapsed && viewMode === 'working' && hasStagedChanges && (
             <div className="flex items-center space-x-2">
               <Input
                 placeholder="Enter commit message..."
@@ -937,121 +1078,266 @@ const FileChangesPanelComponent: React.FC<FileChangesPanelProps> = ({
 
       {!isCollapsed && (
         <div className="min-h-0 flex-1 overflow-y-auto">
-        {fileChanges.map((change, index) => (
-          <div
-            key={index}
-            className={`flex cursor-pointer items-center justify-between border-b border-border/60 px-4 py-2.5 last:border-b-0 transition-colors hover:bg-surface-2 ${
-              change.isStaged ? 'bg-surface-2/70' : ''
-            }`}
-            onClick={() => {
-              void (async () => {
-                const { captureTelemetry } = await import('../lib/telemetryClient');
-                captureTelemetry('changes_viewed');
-              })();
-              setSelectedPath(change.path);
-              setShowDiffModal(true);
-            }}
-          >
-            <div className="flex min-w-0 flex-1 items-center gap-3">
-              <span className="inline-flex h-4 w-4 items-center justify-center text-muted-foreground">
-                <FileTypeIcon
-                  path={change.path}
-                  type={change.status === 'deleted' ? 'file' : 'file'}
-                  size={14}
-                />
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm">{renderPath(change.path)}</div>
-              </div>
-            </div>
-            <div className="ml-3 flex items-center gap-2">
-              {change.additions > 0 && (
-                <span className="rounded bg-green-50 px-1.5 py-0.5 text-[11px] font-medium text-emerald-700 dark:bg-green-900/30 dark:text-emerald-300">
-                  +{change.additions}
-                </span>
-              )}
-              {change.deletions > 0 && (
-                <span className="rounded bg-rose-50 px-1.5 py-0.5 text-[11px] font-medium text-rose-700 dark:bg-rose-900/30 dark:text-rose-300">
-                  -{change.deletions}
-                </span>
-              )}
-              <div className="flex items-center gap-1">
-                {!change.isStaged && (
-                  <TooltipProvider delayDuration={100}>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-muted-foreground hover:bg-accent/30 hover:text-foreground"
-                          onClick={(e) => handleStageFile(change.path, e)}
-                          disabled={stagingFiles.has(change.path)}
-                        >
-                          {stagingFiles.has(change.path) ? (
-                            <Spinner size="sm" />
-                          ) : (
-                            <Plus className="h-4 w-4" />
-                          )}
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent
-                        side="left"
-                        className="max-w-xs border border-border bg-popover px-3 py-2 text-sm text-popover-foreground shadow-lift"
-                      >
-                        <p className="font-medium">Stage file for commit</p>
-                        <p className="mt-0.5 text-xs text-muted-foreground">
-                          Add this file to the staging area so it will be included in the next
-                          commit
-                        </p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                )}
-                <TooltipProvider delayDuration={100}>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-muted-foreground hover:bg-accent/30 hover:text-foreground"
-                        onClick={(e) => handleRevertFile(change.path, e)}
-                        disabled={revertingFiles.has(change.path)}
-                      >
-                        {revertingFiles.has(change.path) ? (
-                          <Spinner size="sm" />
-                        ) : (
-                          <Undo2 className="h-4 w-4" />
-                        )}
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent
-                      side="left"
-                      className="max-w-xs border border-border bg-popover px-3 py-2 text-sm text-popover-foreground shadow-lift"
+          {viewMode === 'pr' ? (
+            <div className="space-y-4 px-4 py-3">
+              <div className="rounded-md border border-border/70 bg-surface/70 p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="text-xs font-semibold text-muted-foreground">Pull Request</div>
+                    <div className="mt-1 line-clamp-2 text-sm font-semibold text-foreground">
+                      {pr?.title || (pr?.number ? `PR #${pr.number}` : 'Pull Request')}
+                    </div>
+                    {pr?.baseRefName || pr?.headRefName ? (
+                      <div className="mt-1 text-[11px] text-muted-foreground">
+                        {pr?.baseRefName || 'base'} {'->'} {pr?.headRefName || 'head'}
+                      </div>
+                    ) : null}
+                  </div>
+                  {pr?.url ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 px-2 text-[10px]"
+                      onClick={() => window.desktopAPI?.openExternal?.(pr.url as string)}
                     >
-                      {change.isStaged ? (
-                        <>
-                          <p className="font-medium">Unstage file</p>
-                          <p className="mt-0.5 text-xs text-muted-foreground">
-                            Remove this file from staging. Click again to discard all changes to
-                            this file.
-                          </p>
-                        </>
-                      ) : (
-                        <>
-                          <p className="font-medium">Revert file changes</p>
-                          <p className="mt-0.5 text-xs text-muted-foreground">
-                            Discard all uncommitted changes to this file and restore it to the last
-                            committed version
-                          </p>
-                        </>
-                      )}
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+                      Open PR
+                      <ArrowUpRight className="ml-1 h-3 w-3" />
+                    </Button>
+                  ) : null}
+                </div>
+                <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                  <span className="rounded border border-border/70 bg-background px-1.5 py-0.5">
+                    {prCommits.length} commits
+                  </span>
+                  <span className="rounded border border-border/70 bg-background px-1.5 py-0.5">
+                    {activeFileCount} files
+                  </span>
+                  <span className="rounded border border-border/70 bg-background px-1.5 py-0.5">
+                    +{prAdditions} / -{prDeletions}
+                  </span>
+                </div>
               </div>
+
+              {prChangesLoading && prCommits.length === 0 && prFiles.length === 0 ? (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Spinner size="sm" />
+                  Loading PR details...
+                </div>
+              ) : prChangesError ? (
+                <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-200">
+                  {prChangesError}
+                </div>
+              ) : (
+                <>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground">
+                      <span>Commits</span>
+                      <span className="text-[11px] font-medium">{prCommits.length}</span>
+                    </div>
+                    {prCommits.length === 0 ? (
+                      <div className="rounded-md border border-border/60 bg-background/60 px-3 py-2 text-xs text-muted-foreground">
+                        No commits found.
+                      </div>
+                    ) : (
+                      prCommits.map((commit, index) => {
+                        const message = commit.message?.trim() || 'Untitled commit';
+                        const author = commit.author?.trim();
+                        const dateLabel = formatTimestamp(commit.date);
+                        const shortOid =
+                          commit.shortOid?.trim() || commit.oid?.slice(0, 7) || '';
+                        return (
+                          <div
+                            key={commit.oid || `${message}-${index}`}
+                            className="rounded-md border border-border/60 bg-background/60 px-3 py-2"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <div className="truncate text-sm font-medium text-foreground">
+                                  {message}
+                                </div>
+                                <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                                  {shortOid ? (
+                                    <span className="rounded border border-border/70 bg-background px-1.5 py-0.5 font-mono text-[10px]">
+                                      {shortOid}
+                                    </span>
+                                  ) : null}
+                                  {author ? <span>{author}</span> : null}
+                                </div>
+                              </div>
+                              {dateLabel ? (
+                                <span className="shrink-0 text-[10px] text-muted-foreground">
+                                  {dateLabel}
+                                </span>
+                              ) : null}
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground">
+                      <span>Files</span>
+                      <span className="text-[11px] font-medium">{prFiles.length}</span>
+                    </div>
+                    {prFiles.length === 0 ? (
+                      <div className="rounded-md border border-border/60 bg-background/60 px-3 py-2 text-xs text-muted-foreground">
+                        No files listed.
+                      </div>
+                    ) : (
+                      prFiles.map((file, index) => {
+                        const meta = changeTypeMeta(file.changeType);
+                        return (
+                          <div
+                            key={`${file.path}-${index}`}
+                            className="flex items-center justify-between gap-3 rounded-md border border-border/60 bg-background/60 px-3 py-2"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate text-sm">{renderPath(file.path)}</div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span
+                                className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold ${meta.className}`}
+                              >
+                                {meta.label}
+                              </span>
+                              {file.additions && file.additions > 0 ? (
+                                <span className="rounded bg-green-50 px-1.5 py-0.5 text-[11px] font-medium text-emerald-700 dark:bg-green-900/30 dark:text-emerald-300">
+                                  +{file.additions}
+                                </span>
+                              ) : null}
+                              {file.deletions && file.deletions > 0 ? (
+                                <span className="rounded bg-rose-50 px-1.5 py-0.5 text-[11px] font-medium text-rose-700 dark:bg-rose-900/30 dark:text-rose-300">
+                                  -{file.deletions}
+                                </span>
+                              ) : null}
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </>
+              )}
             </div>
-          </div>
-        ))}
+          ) : (
+            fileChanges.map((change, index) => (
+              <div
+                key={index}
+                className={`flex cursor-pointer items-center justify-between border-b border-border/60 px-4 py-2.5 last:border-b-0 transition-colors hover:bg-surface-2 ${
+                  change.isStaged ? 'bg-surface-2/70' : ''
+                }`}
+                onClick={() => {
+                  void (async () => {
+                    const { captureTelemetry } = await import('../lib/telemetryClient');
+                    captureTelemetry('changes_viewed');
+                  })();
+                  setSelectedPath(change.path);
+                  setShowDiffModal(true);
+                }}
+              >
+                <div className="flex min-w-0 flex-1 items-center gap-3">
+                  <span className="inline-flex h-4 w-4 items-center justify-center text-muted-foreground">
+                    <FileTypeIcon
+                      path={change.path}
+                      type={change.status === 'deleted' ? 'file' : 'file'}
+                      size={14}
+                    />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm">{renderPath(change.path)}</div>
+                  </div>
+                </div>
+                <div className="ml-3 flex items-center gap-2">
+                  {change.additions > 0 && (
+                    <span className="rounded bg-green-50 px-1.5 py-0.5 text-[11px] font-medium text-emerald-700 dark:bg-green-900/30 dark:text-emerald-300">
+                      +{change.additions}
+                    </span>
+                  )}
+                  {change.deletions > 0 && (
+                    <span className="rounded bg-rose-50 px-1.5 py-0.5 text-[11px] font-medium text-rose-700 dark:bg-rose-900/30 dark:text-rose-300">
+                      -{change.deletions}
+                    </span>
+                  )}
+                  <div className="flex items-center gap-1">
+                    {!change.isStaged && (
+                      <TooltipProvider delayDuration={100}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-muted-foreground hover:bg-accent/30 hover:text-foreground"
+                              onClick={(e) => handleStageFile(change.path, e)}
+                              disabled={stagingFiles.has(change.path)}
+                            >
+                              {stagingFiles.has(change.path) ? (
+                                <Spinner size="sm" />
+                              ) : (
+                                <Plus className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent
+                            side="left"
+                            className="max-w-xs border border-border bg-popover px-3 py-2 text-sm text-popover-foreground shadow-lift"
+                          >
+                            <p className="font-medium">Stage file for commit</p>
+                            <p className="mt-0.5 text-xs text-muted-foreground">
+                              Add this file to the staging area so it will be included in the next
+                              commit
+                            </p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
+                    <TooltipProvider delayDuration={100}>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:bg-accent/30 hover:text-foreground"
+                            onClick={(e) => handleRevertFile(change.path, e)}
+                            disabled={revertingFiles.has(change.path)}
+                          >
+                            {revertingFiles.has(change.path) ? (
+                              <Spinner size="sm" />
+                            ) : (
+                              <Undo2 className="h-4 w-4" />
+                            )}
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent
+                          side="left"
+                          className="max-w-xs border border-border bg-popover px-3 py-2 text-sm text-popover-foreground shadow-lift"
+                        >
+                          {change.isStaged ? (
+                            <>
+                              <p className="font-medium">Unstage file</p>
+                              <p className="mt-0.5 text-xs text-muted-foreground">
+                                Remove this file from staging. Click again to discard all changes
+                                to this file.
+                              </p>
+                            </>
+                          ) : (
+                            <>
+                              <p className="font-medium">Revert file changes</p>
+                              <p className="mt-0.5 text-xs text-muted-foreground">
+                                Discard all uncommitted changes to this file and restore it to the
+                                last committed version
+                              </p>
+                            </>
+                          )}
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       )}
       {showDiffModal && (
