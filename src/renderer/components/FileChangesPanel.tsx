@@ -439,6 +439,7 @@ const FileChangesPanelComponent: React.FC<FileChangesPanelProps> = ({
       const res = await window.desktopAPI.mergePullRequest({
         taskPath: taskId,
         method: mergeMethod === 'default' ? undefined : mergeMethod,
+        prNumber: pr?.number,
       });
       if (res?.success) {
         toast({

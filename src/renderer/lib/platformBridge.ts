@@ -490,11 +490,13 @@ export function installPlatformBridge() {
           taskPath: string;
           method?: string;
           deleteBranch?: boolean;
+          prNumber?: number;
         }) =>
           invoke('git_merge_pr', {
             taskPath: args.taskPath,
             method: args.method,
             deleteBranch: args.deleteBranch,
+            prNumber: args.prNumber,
           });
         (window as any).desktopAPI.getBranchStatus = (args: { taskPath: string }) =>
           invoke('git_get_branch_status', { taskPath: args.taskPath });

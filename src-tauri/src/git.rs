@@ -2525,28 +2525,54 @@ pub async fn git_create_pr(
   .await
 }
 
-fn git_merge_pr_sync(task_path: String, method: Option<String>, delete_branch: Option<bool>) -> Value {
+fn git_merge_pr_sync(
+  task_path: String,
+  method: Option<String>,
+  delete_branch: Option<bool>,
+  pr_number: Option<i64>,
+) -> Value {
   let resolved_path = resolve_real_path(Path::new(&task_path));
   if let Err(err) = run_git(&resolved_path, &["rev-parse", "--is-inside-work-tree"]) {
     return json!({ "success": false, "error": err });
   }
 
-  let mut args: Vec<&str> = vec!["pr", "merge"];
+  let mut args: Vec<String> = vec!["pr".to_string(), "merge".to_string()];
+  let mut has_strategy = false;
   if let Some(raw_method) = method {
     let normalized = raw_method.trim().to_ascii_lowercase();
     match normalized.as_str() {
-      "merge" => args.push("--merge"),
-      "squash" => args.push("--squash"),
-      "rebase" => args.push("--rebase"),
+      "merge" => {
+        args.push("--merge".to_string());
+        has_strategy = true;
+      }
+      "squash" => {
+        args.push("--squash".to_string());
+        has_strategy = true;
+      }
+      "rebase" => {
+        args.push("--rebase".to_string());
+        has_strategy = true;
+      }
       _ => {}
     }
   }
-  if delete_branch.unwrap_or(false) {
-    args.push("--delete-branch");
+  if !has_strategy {
+    args.push("--merge".to_string());
   }
-  args.push(".");
+  if delete_branch.unwrap_or(false) {
+    args.push("--delete-branch".to_string());
+  }
+  if let Some(number) = pr_number {
+    args.push(number.to_string());
+  } else {
+    args.push(".".to_string());
+  }
 
-  let (success, stdout, stderr) = match run_cmd_output("gh", &args, Some(&resolved_path)) {
+  let (success, stdout, stderr) = match run_cmd_output(
+    "gh",
+    &args.iter().map(|s| s.as_str()).collect::<Vec<&str>>(),
+    Some(&resolved_path),
+  ) {
     Ok(result) => result,
     Err(err) => return json!({ "success": false, "error": err }),
   };
@@ -2577,11 +2603,12 @@ pub async fn git_merge_pr(
   task_path: String,
   method: Option<String>,
   delete_branch: Option<bool>,
+  pr_number: Option<i64>,
 ) -> Value {
   let fallback_path = task_path.clone();
   run_blocking(
     json!({ "success": false, "error": "git_merge_pr failed", "taskPath": fallback_path }),
-    move || git_merge_pr_sync(task_path, method, delete_branch),
+    move || git_merge_pr_sync(task_path, method, delete_branch, pr_number),
   )
   .await
 }

@@ -358,6 +358,7 @@ declare global {
         taskPath: string;
         method?: 'default' | 'merge' | 'squash' | 'rebase';
         deleteBranch?: boolean;
+        prNumber?: number;
       }) => Promise<{
         success: boolean;
         pr?: {
@@ -878,6 +879,7 @@ export interface DesktopAPI {
     taskPath: string;
     method?: 'default' | 'merge' | 'squash' | 'rebase';
     deleteBranch?: boolean;
+    prNumber?: number;
   }) => Promise<{
     success: boolean;
     pr?: {
